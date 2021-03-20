@@ -1,0 +1,966 @@
+module PureScript.CST.Tidy
+  ( FormatConf
+  , defaultFormatConf
+  , UnicodePref(..)
+  , TypeArrowPref(..)
+  , Format
+  , FormatRecovered
+  , formatModule
+  , formatDecl
+  , formatType
+  , formatExpr
+  , formatBinder
+  , class FormatError
+  , formatError
+  ) where
+
+import Prelude
+
+import Data.Array (foldMap, foldl, foldr)
+import Data.Array as Array
+import Data.Array.NonEmpty (NonEmptyArray)
+import Data.Array.NonEmpty as NonEmptyArray
+import Data.Map as Map
+import Data.Maybe (Maybe(..))
+import Data.String.CodeUnits as SCU
+import Data.Tuple (Tuple(..), fst)
+import PureScript.CST.Errors (RecoveredError(..))
+import PureScript.CST.Tidy.Doc (FormatDoc, align, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, indent, joinWith, joinWithMap, leadingLineComment, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
+import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp)
+import PureScript.CST.Tidy.Hang as Hang
+import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), PrecedenceMap, QualifiedOperator(..), toOperatorTree)
+import PureScript.CST.Print (printToken)
+import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceToken, Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
+
+data UnicodePref
+  = UnicodeSource
+  | UnicodeAlways
+  | UnicodeNever
+
+derive instance eqUnicodePref :: Eq UnicodePref
+
+data TypeArrowPref
+  = TypeArrowFirst
+  | TypeArrowLast
+
+derive instance eqTypeArrowPref :: Eq TypeArrowPref
+
+type FormatConf e a =
+  { formatError :: e -> FormatDoc a
+  , unicode :: UnicodePref
+  , typeArrowPlacement :: TypeArrowPref
+  , operators :: PrecedenceMap
+  }
+
+defaultFormatConf :: forall e a. FormatError e => FormatConf e a
+defaultFormatConf =
+  { formatError
+  , unicode: UnicodeSource
+  , typeArrowPlacement: TypeArrowLast
+  , operators: Map.empty
+  }
+
+class FormatError e where
+  formatError :: forall a. e -> FormatDoc a
+
+instance formatErrorVoid :: FormatError Void where
+  formatError = absurd
+
+instance formatErrorRecoveredError :: FormatError RecoveredError where
+  formatError (RecoveredError { tokens }) = foldMap (formatToken errorConf) tokens
+    where
+    errorConf =
+      { unicode: UnicodeSource
+      }
+
+type Format f e a = FormatConf e a -> f -> FormatDoc a
+type FormatRecovered f e a = FormatConf e a -> f e -> FormatDoc a
+type FormatHanging f e a = FormatConf e a -> f -> HangingDoc a
+type FormatSpace a = FormatDoc a -> FormatDoc a -> FormatDoc a
+
+formatComment :: forall l a c. (String -> FormatDoc a) -> c -> Comment l -> FormatDoc a -> FormatDoc a
+formatComment lineComment _ com next = case com of
+  Comment str
+    | SCU.take 2 str == "--" ->
+        lineComment str `break` next
+    | otherwise ->
+        blockComment str `space` next
+  Line _ n ->
+    sourceBreak n next
+  Space n ->
+    next
+
+formatToken :: forall a r. { unicode :: UnicodePref | r } -> SourceToken -> FormatDoc a
+formatToken conf tok = do
+  let
+    token =
+      text (printToken tok.value)
+        `space` foldr (formatComment trailingLineComment conf) mempty tok.trailingComments
+  foldr (formatComment leadingLineComment conf) token tok.leadingComments
+
+formatName :: forall e a n. Format (Name n) e a
+formatName conf (Name { token }) = formatToken conf token
+
+formatQualifiedName :: forall e a n. Format (QualifiedName n) e a
+formatQualifiedName conf (QualifiedName { token }) = formatToken conf token
+
+formatModule :: forall e a. FormatRecovered Module e a
+formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }) =
+  joinWith break
+    [ anchor (formatToken conf header.keyword) `space` indent do
+        anchor (formatName conf header.name)
+          `flexSpaceBreak`
+            anchor (foldMap (formatParenListNonEmpty formatExport conf) header.exports)
+          `space`
+            anchor (formatToken conf header."where")
+
+    , joinWithMap break (formatImportDecl conf) header.imports
+    , joinWithMap break (formatDecl conf) body.decls
+    ]
+
+formatExport :: forall e a. FormatRecovered Export e a
+formatExport conf = case _ of
+  ExportValue n ->
+    formatName conf n
+  ExportOp n ->
+    formatName conf n
+  ExportType n members->
+    flexGroup $ formatName conf n `softBreak` indent (foldMap (formatDataMembers conf) members)
+  ExportTypeOp t n ->
+    formatToken conf t `space` formatName conf n
+  ExportClass t n ->
+    formatToken conf t `space` formatName conf n
+  ExportKind t n ->
+    formatToken conf t `space` formatName conf n
+  ExportModule t n ->
+    formatToken conf t `space` formatName conf n
+  ExportError e ->
+    conf.formatError e
+
+formatDataMembers :: forall e a. Format DataMembers e a
+formatDataMembers conf = case _ of
+  DataAll t ->
+    formatToken conf t
+  DataEnumerated ms ->
+    formatParenList formatName conf ms
+
+formatImportDecl :: forall e a. FormatRecovered ImportDecl e a
+formatImportDecl conf (ImportDecl imp) =
+  formatToken conf imp.keyword `space` indent importDeclBody
+  where
+  importDeclBody = case imp.names of
+    Just (Tuple (Just hiding) nameList) ->
+      formatName conf imp."module"
+        `space` anchor (formatToken conf hiding)
+        `flexSpaceBreak` anchor (formatParenListNonEmpty formatImport conf nameList)
+        `space` foldMap formatImportQualified imp.qualified
+    Just (Tuple Nothing nameList) ->
+      formatName conf imp."module"
+        `flexSpaceBreak` anchor (formatParenListNonEmpty formatImport conf nameList)
+        `space` foldMap formatImportQualified imp.qualified
+    Nothing ->
+      formatName conf imp."module"
+        `space` foldMap formatImportQualified imp.qualified
+
+  formatImportQualified (Tuple as qualName) =
+    anchor (formatToken conf as) `space` anchor (formatName conf qualName)
+
+formatImport :: forall e a. FormatRecovered Import e a
+formatImport conf = case _ of
+  ImportValue n ->
+    formatName conf n
+  ImportOp n ->
+    formatName conf n
+  ImportType n members ->
+    flexGroup $ formatName conf n `softBreak` indent (foldMap (formatDataMembers conf) members)
+  ImportTypeOp t n ->
+    formatToken conf t `space` formatName conf n
+  ImportClass t n ->
+    formatToken conf t `space` formatName conf n
+  ImportKind t n ->
+    formatToken conf t `space` formatName conf n
+  ImportError e ->
+    conf.formatError e
+
+formatDecl :: forall e a. FormatRecovered Declaration e a
+formatDecl conf = case _ of
+  DeclData head (Just (Tuple equals (Separated ctors))) ->
+    if Array.null ctors.tail then
+      declare
+        (formatDataHead conf head)
+        (formatToken conf equals)
+        (formatDataCtor conf ctors.head)
+    else
+      formatDataHead conf head `flexSpaceBreak` indent do
+        formatDataElem (Tuple equals ctors.head)
+          `spaceBreak` joinWithMap spaceBreak formatDataElem ctors.tail
+    where
+    formatDataElem (Tuple a b) =
+      formatToken conf a
+        `space` formatListElem 2 formatDataCtor conf b
+
+  DeclData head _ ->
+    formatDataHead conf head
+
+  DeclType head equals ty ->
+    declare
+      (formatDataHead conf head)
+      (formatToken conf equals)
+      (formatType conf ty)
+
+  DeclNewtype head equals name ty ->
+    declare
+      (formatDataHead conf head)
+      (formatToken conf equals)
+      (formatDataCtor conf (DataCtor { name, fields: [ ty ]}))
+
+  DeclRole kw1 kw2 name rls ->
+    flatten $ words <> NonEmptyArray.toArray roles
+    where
+    words =
+      [ formatToken conf kw1
+      , formatToken conf kw2
+      , formatName conf name
+      ]
+
+    roles =
+      map (formatToken conf <<< fst) rls
+
+  DeclFixity { keyword: Tuple keyword _, prec: Tuple prec _, operator } ->
+    case operator of
+      FixityValue name as op ->
+        flatten
+          [ formatToken conf keyword
+          , formatToken conf prec
+          , formatQualifiedName conf name
+          , formatToken conf as
+          , formatName conf op
+          ]
+      FixityType ty name as op ->
+        flatten
+          [ formatToken conf keyword
+          , formatToken conf prec
+          , formatToken conf ty
+          , formatQualifiedName conf name
+          , formatToken conf as
+          , formatName conf op
+          ]
+
+  DeclKindSignature tok (Labeled { label, separator, value }) ->
+    formatSignature conf $ Labeled
+      { label:
+          flatten
+            [ formatToken conf tok
+            , formatName conf label
+            ]
+      , separator
+      , value
+      }
+
+  DeclForeign kw1 kw2 frn ->
+    case frn of
+      ForeignValue (Labeled lbl) ->
+        formatSignature conf $ Labeled lbl
+          { label =
+              flatten
+                [ formatToken conf kw1
+                , formatToken conf kw2
+                , formatName conf lbl.label
+                ]
+          }
+      ForeignData kw3 (Labeled lbl) ->
+        formatSignature conf $ Labeled lbl
+          { label =
+              flatten
+                [ formatToken conf kw1
+                , formatToken conf kw2
+                , formatToken conf kw3
+                , formatName conf lbl.label
+                ]
+          }
+      ForeignKind kw3 name ->
+        flatten
+          [ formatToken conf kw1
+          , formatToken conf kw2
+          , formatToken conf kw3
+          , formatName conf name
+          ]
+
+  DeclClass clsHead mbBody ->
+    case mbBody of
+      Nothing ->
+        formatClassHead conf (Tuple clsHead Nothing)
+      Just (Tuple wh sigs) ->
+        formatClassHead conf (Tuple clsHead (Just wh))
+          `break` indent do
+            joinWithMap break
+              (formatSignature conf <<< overLabel (formatName conf))
+              sigs
+
+  DeclInstanceChain (Separated { head, tail }) ->
+    formatInstance conf head
+      `break`
+        joinWithMap break
+          (\(Tuple tok inst) -> formatToken conf tok `space` anchor (formatInstance conf inst))
+          tail
+
+  DeclDerive kw nt hd ->
+    formatToken conf kw
+      `space` foldMap (indent <<< anchor <<< formatToken conf) nt
+      `space` anchor (formatInstanceHead conf (Tuple hd Nothing))
+
+  DeclSignature sig ->
+    formatSignature conf $ overLabel (formatName conf) sig
+
+  DeclValue binding ->
+    formatValueBinding conf binding
+
+  DeclError e ->
+    conf.formatError e
+
+formatDataHead :: forall e a. FormatRecovered DataHead e a
+formatDataHead conf { keyword, name, vars } =
+  formatToken conf keyword `space` indent do
+    anchor (formatName conf name)
+      `flexSpaceBreak` joinWithMap spaceBreak (formatTypeVarBinding conf) vars
+
+formatDataCtor :: forall e a. FormatRecovered DataCtor e a
+formatDataCtor conf (DataCtor { name, fields }) =
+  formatName conf name `flexSpaceBreak` indent do
+    joinWithMap spaceBreak (formatType conf) fields
+
+formatClassHead :: forall e a. Format (Tuple (ClassHead e) (Maybe SourceToken)) e a
+formatClassHead conf (Tuple cls wh) =
+  formatToken conf cls.keyword `flexSpaceBreak` indent do
+    foldMap (formatConstraints conf) cls.super
+      `spaceBreak`
+        flexGroup do
+          formatName conf cls.name
+            `spaceBreak`
+              joinWithMap spaceBreak (indent <<< formatTypeVarBinding conf) cls.vars
+      `spaceBreak`
+        flexGroup do
+          foldMap formatFundeps cls.fundeps
+      `spaceBreak`
+        foldMap (formatToken conf) wh
+  where
+  formatFundeps (Tuple tok (Separated { head, tail })) =
+    formatToken conf tok
+      `space`
+        formatListElem 2 formatFundep conf head
+      `softBreak`
+        joinWithMap softBreak
+          (\(Tuple sep elem) ->
+            formatToken conf sep
+              `space` formatListElem 2 formatFundep conf elem)
+          tail
+
+formatConstraints :: forall e a. Format (Tuple (OneOrDelimited (Type e)) SourceToken) e a
+formatConstraints conf (Tuple cs arr) =
+  formatOneOrDelimited formatType conf cs
+    `space` formatToken conf arr
+
+formatFundep :: forall e a. Format ClassFundep e a
+formatFundep conf = case _ of
+  FundepDetermined tok names ->
+    formatToken conf tok
+      `space` joinWithMap space (formatName conf) names
+  FundepDetermines names1 tok names2 ->
+    joinWithMap space (formatName conf) names1
+      `space` formatToken conf tok
+      `space` joinWithMap space (formatName conf) names2
+
+formatOneOrDelimited :: forall b e a. Format b e a -> Format (OneOrDelimited b) e a
+formatOneOrDelimited format conf = case _ of
+  One a -> format conf a
+  Many as -> formatParenListNonEmpty format conf as
+
+formatInstance :: forall e a. FormatRecovered Instance e a
+formatInstance conf (Instance { head, body }) = case body of
+  Nothing ->
+    formatInstanceHead conf (Tuple head Nothing)
+  Just (Tuple wh bindings) ->
+    formatInstanceHead conf (Tuple head (Just wh)) `break` indent do
+      joinWithMap break (formatInstanceBinding conf) bindings
+
+formatInstanceHead :: forall e a. Format (Tuple (InstanceHead e) (Maybe SourceToken)) e a
+formatInstanceHead conf (Tuple hd mbWh) =
+  formatToken conf hd.keyword `space` indent do
+    anchor (formatName conf hd.name)
+      `space`
+        anchor (formatToken conf hd.separator)
+      `flexSpaceBreak` do
+        foldMap (formatConstraints conf) hd.constraints
+          `spaceBreak` flexGroup do
+            formatQualifiedName conf hd.className
+              `space` indent do
+                joinWithMap spaceBreak (formatType conf) hd.types
+              `spaceBreak` foldMap (formatToken conf) mbWh
+
+formatInstanceBinding :: forall e a. FormatRecovered InstanceBinding e a
+formatInstanceBinding conf = case _ of
+  InstanceBindingSignature sig ->
+    formatSignature conf $ overLabel (formatName conf) sig
+  InstanceBindingName vbf ->
+    formatValueBinding conf vbf
+
+formatTypeVarBinding :: forall e a. FormatRecovered TypeVarBinding e a
+formatTypeVarBinding conf = case _ of
+  TypeVarKinded w ->
+    formatParens formatKindedTypeVarBinding conf w
+  TypeVarName n ->
+    formatName conf n
+
+formatKindedTypeVarBinding :: forall e a. Format (Labeled (Name Ident) (Type e)) e a
+formatKindedTypeVarBinding conf (Labeled { label, separator, value }) =
+  formatName conf label `space` indent do
+    anchor (formatToken conf separator)
+      `flexSpaceBreak` formatType conf value
+
+formatSignature :: forall e a. Format (Labeled (FormatDoc a) (Type e)) e a
+formatSignature conf (Labeled { label, separator, value }) =
+  label `space` indent do
+    flexGroup $ anchor (formatToken conf separator)
+      `spaceBreak` anchor (flexGroup (formatType conf value))
+
+formatMonotype :: forall e a. FormatRecovered Type e a
+formatMonotype conf = case _ of
+  TypeVar n ->
+    formatName conf n
+  TypeConstructor n ->
+    formatQualifiedName conf n
+  TypeWildcard t ->
+    formatToken conf t
+  TypeHole n ->
+    formatName conf n
+  TypeString t _ ->
+    formatToken conf t
+  TypeArrowName t ->
+    formatToken conf t
+  TypeOpName n ->
+    formatQualifiedName conf n
+  TypeRow row ->
+    formatRow softSpace spaceBreak conf row
+  TypeRecord row ->
+    formatRow space spaceBreak conf row
+  TypeApp head tail ->
+    formatApps formatType conf { head, tail }
+  TypeParens ty ->
+    formatParens formatType conf ty
+  TypeUnaryRow t ty ->
+    formatToken conf t `space` formatType conf ty
+  TypeKinded ty1 t ty2 ->
+    formatType conf ty1 `space` indent do
+      anchor (formatToken conf t)
+        `flexSpaceBreak` anchor (formatType conf ty2)
+  TypeOp head tail ->
+    formatOperators formatType formatQualifiedName conf { head, tail }
+  TypeError e ->
+    conf.formatError e
+  -- Handled by formatPolytype
+  TypeArrow _ _ _ ->
+    mempty
+  -- Handled by formatPolytype
+  TypeConstrained _ _ _ ->
+    mempty
+  -- Handled by formatPolytype
+  TypeForall _ _ _ _ ->
+    mempty
+
+formatType :: forall e a. FormatRecovered Type e a
+formatType conf = formatPolytype conf <<< toPolytype
+
+data Poly e
+  = PolyForall SourceToken (NonEmptyArray (TypeVarBinding e)) SourceToken
+  | PolyArrow (Type e) SourceToken
+
+type Polytype e =
+  { init :: Array (Poly e)
+  , last :: Type e
+  }
+
+toPolytype :: forall e. Type e -> Polytype e
+toPolytype = go []
+  where
+  go init = case _ of
+    TypeForall tok vars dot ty ->
+      go (Array.snoc init (PolyForall tok vars dot)) ty
+    TypeArrow ty1 arr ty2 ->
+      go (Array.snoc init (PolyArrow ty1 arr)) ty2
+    TypeConstrained ty1 arr ty2 ->
+      go (Array.snoc init (PolyArrow ty1 arr)) ty2
+    last ->
+      { init, last }
+
+formatPolytype :: forall e a. FormatRecovered Polytype e a
+formatPolytype conf { init, last } = case conf.typeArrowPlacement of
+  TypeArrowFirst ->
+    mempty
+  TypeArrowLast ->
+    joinWithMap spaceBreak (formatPolyArrowLast conf) init
+      `spaceBreak` flexGroup (formatMonotype conf last)
+
+formatPolyArrowLast :: forall e a. FormatRecovered Poly e a
+formatPolyArrowLast conf = case _ of
+  PolyForall kw vars dot ->
+    foldl go (formatToken conf kw) vars
+      <> indent (anchor (formatToken conf dot))
+    where
+    go doc tyVar =
+      doc `flexSpaceBreak` indent (formatTypeVarBinding conf tyVar)
+
+  PolyArrow ty arr ->
+    flexGroup (formatType conf ty)
+      `space` indent (anchor (formatToken conf arr))
+
+formatRow :: forall e a. FormatSpace a -> FormatSpace a -> Format (Wrapped (Row e)) e a
+formatRow openSpace closeSpace conf (Wrapped { open, value: Row { labels, tail }, close }) = case labels, tail of
+  Nothing, Nothing ->
+    formatEmptyList conf { open, close }
+  Just value, Nothing ->
+    formatDelimitedNonEmpty openSpace closeSpace 2 formatRowLabeled conf (Wrapped { open, value, close })
+  Nothing, Just (Tuple bar ty) ->
+    formatToken conf open
+      `openSpace`
+        flatten
+          [ formatToken conf bar
+          , formatType conf ty
+          ]
+      `closeSpace`
+        formatToken conf close
+  Just (Separated rowLabels), Just (Tuple bar ty) ->
+    formatToken conf open
+      `openSpace`
+        formatListElem 2 formatRowLabeled conf rowLabels.head
+      `softBreak`
+        formatListTail 2 formatRowLabeled conf rowLabels.tail
+      `spaceBreak`
+        (formatToken conf bar `space` formatListElem 2 formatType conf ty)
+      `closeSpace`
+        formatToken conf close
+
+formatRowLabeled :: forall e a. Format (Labeled (Name Label) (Type e)) e a
+formatRowLabeled conf (Labeled { label, separator, value }) =
+  formatName conf label `space` indent do
+    anchor (formatToken conf separator)
+      `flexSpaceBreak` anchor (formatType conf value)
+
+formatExpr :: forall e a. FormatRecovered Expr e a
+formatExpr conf = Hang.toFormatDoc <<< formatHangingExpr conf
+
+formatHangingExpr :: forall e a. FormatHanging (Expr e) e a
+formatHangingExpr conf = case _ of
+  ExprHole n ->
+    hangBreak $ formatName conf n
+  ExprSection t ->
+    hangBreak $ formatToken conf t
+  ExprIdent n ->
+    hangBreak $ formatQualifiedName conf n
+  ExprConstructor n ->
+    hangBreak $ formatQualifiedName conf n
+  ExprBoolean t _ ->
+    hangBreak $ formatToken conf t
+  ExprChar t _ ->
+    hangBreak $ formatToken conf t
+  ExprString t _ ->
+    hangBreak $ formatToken conf t
+  ExprInt t _ ->
+    hangBreak $ formatToken conf t
+  ExprNumber t _ ->
+    hangBreak $ formatToken conf t
+  ExprArray exprs ->
+    hangBreak $ formatBasicList formatExpr conf exprs
+  ExprRecord fields ->
+    hangBreak $ formatBasicList (formatRecordLabeled formatExpr) conf fields
+  ExprParens expr ->
+    hangBreak $ formatParens formatExpr conf expr
+  ExprTyped expr separator ty ->
+    hangBreak $ formatSignature conf $ Labeled
+      { label: formatExpr conf expr
+      , separator
+      , value: ty
+      }
+  ExprInfix expr exprs ->
+    hangConcatApp
+      (formatHangingExpr conf expr)
+      (map (\(Tuple op b) -> hang (formatParens formatExpr conf op) (formatHangingExpr conf b)) exprs)
+  ExprOp expr exprs ->
+    formatHangingOperatorTree formatQualifiedName formatHangingExpr conf
+      $ toQualifiedOperatorTree conf.operators OperatorValue expr exprs
+  ExprOpName n ->
+    hangBreak $ formatQualifiedName conf n
+  ExprNegate t expr ->
+    hangBreak $ formatToken conf t <> formatExpr conf expr
+  ExprRecordAccessor { expr, dot, path: Separated { head, tail } } ->
+    hangBreak $ formatExpr conf expr <> indent do
+      foldMap anchor
+        [ formatToken conf dot
+        , formatName conf head
+        , foldMap (\(Tuple a b) -> anchor (formatToken conf a) <> anchor (formatName conf b)) tail
+        ]
+  ExprRecordUpdate expr upd ->
+    hang
+      (formatExpr conf expr)
+      (hangBreak (formatBasicListNonEmpty formatRecordUpdate conf upd))
+
+  ExprApp expr exprs ->
+    hangApp
+      (formatHangingExpr conf expr)
+      (map (formatHangingExpr conf) exprs)
+
+  ExprLambda lmb ->
+    hang
+      ((formatToken conf lmb.symbol <> binders) `space` indent (anchor (formatToken conf lmb.arrow)))
+      (formatHangingExpr conf lmb.body)
+    where
+    binders = align 1 $ flexGroup do
+      joinWithMap spaceBreak (anchor <<< formatBinder conf) lmb.binders
+
+  ExprIf ifte ->
+    hangBreak $ formatElseIfChain conf $ toElseIfChain ifte
+
+  ExprCase caseOf@{ head: Separated { head, tail } } ->
+    hang
+      (formatToken conf caseOf.keyword `flexSpaceBreak` indent caseHead)
+      (hangBreak (joinWithMap break (flexGroup <<< formatCaseBranch conf) caseOf.branches))
+    where
+    caseHead =
+      caseHeadExprs `spaceBreak` anchor (formatToken conf caseOf.of)
+
+    caseHeadExprs =
+      foldl
+        (\doc (Tuple a b) ->
+          (doc <> anchor (formatToken conf a))
+            `spaceBreak` flexGroup (formatExpr conf b))
+        (flexGroup (formatExpr conf head))
+        tail
+
+  ExprLet letIn ->
+    hangBreak $ formatToken conf letIn.keyword
+      `flexSpaceBreak`
+        indent (joinWithMap break (formatLetBinding conf) letIn.bindings)
+      `flexSpaceBreak`
+        (formatToken conf letIn.in `spaceBreak` indent (formatExpr conf letIn.body))
+
+  ExprDo doBlock ->
+    hang
+      (formatToken conf doBlock.keyword)
+      (hangBreak (joinWithMap break (flexGroup <<< formatDoStatement conf) doBlock.statements))
+
+  ExprAdo adoBlock ->
+    hang
+      (formatToken conf adoBlock.keyword)
+      (hangBreak (joinWithMap break (formatDoStatement conf) adoBlock.statements
+        `flexSpaceBreak`
+          (formatToken conf adoBlock.in
+            `flexSpaceBreak`
+              indent (formatExpr conf adoBlock.result))))
+
+  ExprError e ->
+    hangBreak $ conf.formatError e
+
+data ElseIfChain e
+  = IfThen SourceToken (Expr e) SourceToken (Expr e)
+  | ElseIfThen SourceToken SourceToken (Expr e) SourceToken (Expr e)
+  | Else SourceToken (Expr e)
+
+toElseIfChain :: forall e. IfThenElse e -> NonEmptyArray (ElseIfChain e)
+toElseIfChain ifte = go (pure (IfThen ifte.keyword ifte.cond ifte.then ifte.true)) ifte
+  where
+  go acc curr = case curr.false of
+    ExprIf next -> do
+      let chain = ElseIfThen curr.else next.keyword next.cond next.then next.true
+      go (NonEmptyArray.snoc acc chain) next
+    expr ->
+      NonEmptyArray.snoc acc (Else curr.else expr)
+
+formatElseIfChain :: forall e a. Format (NonEmptyArray (ElseIfChain e)) e a
+formatElseIfChain conf = joinWithMap flexSpaceBreak case _ of
+  IfThen kw1 cond kw2 expr ->
+    formatToken conf kw1
+      `flexSpaceBreak`
+        indent (anchor (flexGroup (formatExpr conf cond)))
+      `space`
+        Hang.toFormatDoc (anchor (formatToken conf kw2) `hang` formatHangingExpr conf expr)
+  ElseIfThen kw1 kw2 cond kw3 expr ->
+    formatToken conf kw1
+      `space`
+        indent (anchor (formatToken conf kw2))
+      `flexSpaceBreak`
+        indent (anchor (flexGroup (formatExpr conf cond)))
+      `space`
+        Hang.toFormatDoc (anchor (formatToken conf kw3) `hang` formatHangingExpr conf expr)
+  Else kw1 expr ->
+    Hang.toFormatDoc (formatToken conf kw1 `hang` formatHangingExpr conf expr)
+
+formatRecordUpdate :: forall e a. FormatRecovered RecordUpdate e a
+formatRecordUpdate conf = case _ of
+  RecordUpdateLeaf n t expr ->
+    declare (formatName conf n) (formatToken conf t) (flexGroup (formatExpr conf expr))
+  RecordUpdateBranch n upd ->
+    formatName conf n `flexSpaceBreak` indent do
+      formatBasicListNonEmpty formatRecordUpdate conf upd
+
+formatCaseBranch :: forall e a. Format (Tuple (Separated (Binder e)) (Guarded e)) e a
+formatCaseBranch conf (Tuple (Separated { head, tail }) guarded) =
+  case guarded of
+    Unconditional tok (Where { expr, bindings }) ->
+      flexGroup caseBinders
+        `space`
+          Hang.toFormatDoc (formatToken conf tok `hang` formatHangingExpr conf expr)
+        `break`
+          indent (foldMap (formatWhere conf) bindings)
+
+    Guarded guards ->
+      flexGroup caseBinders `flexSpaceBreak` indent do
+        joinWithMap break (formatGuardedExpr conf) guards
+
+  where
+  caseBinders =
+    foldl
+      (\doc (Tuple a b) ->
+        (doc <> indent (anchor (formatToken conf a)))
+          `spaceBreak` flexGroup (formatBinder conf b))
+      (flexGroup (formatBinder conf head))
+      tail
+
+formatGuardedExpr :: forall e a. FormatRecovered GuardedExpr e a
+formatGuardedExpr conf (GuardedExpr ge@{ patterns: Separated { head, tail }, where: Where { expr, bindings } }) =
+  formatToken conf ge.bar
+    `space`
+      flexGroup patternGuards
+    `space`
+      align 2 do
+        Hang.toFormatDoc (anchor (formatToken conf ge.separator) `hang` formatHangingExpr conf expr)
+          `break` indent (foldMap (formatWhere conf) bindings)
+  where
+  patternGuards =
+    formatListElem 2 formatPatternGuard conf head
+      `softBreak` formatListTail 2 formatPatternGuard conf tail
+
+formatPatternGuard :: forall e a. FormatRecovered PatternGuard e a
+formatPatternGuard conf (PatternGuard { binder, expr }) = case binder of
+  Nothing ->
+    formatExpr conf expr
+  Just (Tuple binder' t) ->
+    formatBinder conf binder' `space` indent do
+      anchor (formatToken conf t)
+        `flexSpaceBreak` formatExpr conf expr
+
+formatWhere :: forall e a. Format (Tuple SourceToken (NonEmptyArray (LetBinding e))) e a
+formatWhere conf (Tuple kw bindings) =
+  formatToken conf kw
+    `break` joinWithMap break (flexGroup <<< formatLetBinding conf) bindings
+
+formatLetBinding :: forall e a. FormatRecovered LetBinding e a
+formatLetBinding conf = case _ of
+  LetBindingSignature (Labeled lbl) ->
+    formatSignature conf $ Labeled lbl { label = formatName conf lbl.label }
+  LetBindingName binding ->
+    formatValueBinding conf binding
+  LetBindingPattern binder tok (Where { expr, bindings }) ->
+    flexGroup (formatBinder conf binder)
+      `space`
+        Hang.toFormatDoc (anchor (formatToken conf tok) `hang` formatHangingExpr conf expr)
+      `break`
+        indent (foldMap (formatWhere conf) bindings)
+
+  LetBindingError e ->
+    conf.formatError e
+
+formatValueBinding :: forall e a. FormatRecovered ValueBindingFields e a
+formatValueBinding conf { name, binders, guarded } =
+  case guarded of
+    Unconditional tok (Where { expr, bindings }) ->
+      formatName conf name
+        `flexSpaceBreak`
+          indent do
+            joinWithMap spaceBreak (anchor <<< formatBinder conf) binders
+        `space`
+          Hang.toFormatDoc (indent (formatToken conf tok) `hang` formatHangingExpr conf expr)
+        `break`
+          indent (foldMap (formatWhere conf) bindings)
+
+    Guarded guards ->
+      formatName conf name
+        `flexSpaceBreak` indent (joinWithMap spaceBreak (anchor <<< formatBinder conf) binders)
+        `flexSpaceBreak` indent (joinWithMap break (formatGuardedExpr conf) guards)
+
+formatDoStatement :: forall e a. FormatRecovered DoStatement e a
+formatDoStatement conf = case _ of
+  DoLet kw bindings ->
+    formatToken conf kw
+      `flexSpaceBreak`
+        indent (joinWithMap break (formatLetBinding conf) bindings)
+  DoDiscard expr ->
+    formatExpr conf expr
+  DoBind binder tok expr ->
+    declare
+      (formatBinder conf binder)
+      (anchor (formatToken conf tok))
+      (formatExpr conf expr)
+  DoError e ->
+    conf.formatError e
+
+formatBinder :: forall e a. FormatRecovered Binder e a
+formatBinder conf = case _ of
+  BinderWildcard t ->
+    formatToken conf t
+  BinderVar n ->
+    formatName conf n
+  BinderNamed n t b ->
+    (formatName conf n <> indent (formatToken conf t)) `flexSoftBreak` indent (formatBinder conf b)
+  BinderConstructor n binders ->
+    case NonEmptyArray.fromArray binders of
+      Nothing ->
+        formatQualifiedName conf n
+      Just binders' ->
+        formatApps formatBinder conf
+          { head: BinderConstructor n []
+          , tail: binders'
+          }
+  BinderBoolean t _ ->
+    formatToken conf t
+  BinderChar t _ ->
+    formatToken conf t
+  BinderString t _ ->
+    formatToken conf t
+  BinderInt neg t _ ->
+    foldMap (formatToken conf) neg <> formatToken conf t
+  BinderNumber neg t _ ->
+    foldMap (formatToken conf) neg <> formatToken conf t
+  BinderArray binders ->
+    formatBasicList formatBinder conf binders
+  BinderRecord binders ->
+    formatBasicList (formatRecordLabeled formatBinder) conf binders
+  BinderParens binder ->
+    formatParens formatBinder conf binder
+  BinderTyped binder separator ty ->
+    formatSignature conf $ Labeled
+      { label: formatBinder conf binder
+      , separator
+      , value: ty
+      }
+  BinderOp binder binders ->
+    formatOperators formatBinder formatQualifiedName conf
+      { head: binder
+      , tail: binders
+      }
+  BinderError e ->
+    conf.formatError e
+
+formatRecordLabeled :: forall b e a. Format b e a -> Format (RecordLabeled b) e a
+formatRecordLabeled format conf = case _ of
+  RecordPun n ->
+    formatName conf n
+  RecordField label separator value ->
+    formatName conf label <> indent do
+      flexGroup $ anchor (formatToken conf separator)
+        `spaceBreak` anchor (flexGroup (format conf value))
+
+formatApps :: forall e a b. Format b e a -> Format { head :: b, tail :: NonEmptyArray b } e a
+formatApps format conf { head, tail } =
+  foldl go (flexGroup (format conf head)) tail
+  where
+  go doc b =
+    doc `flexSpaceBreak` indent (format conf b)
+
+formatOperators :: forall e a b c. Format b e a -> Format c e a -> Format { head :: b, tail :: NonEmptyArray (Tuple c b) } e a
+formatOperators format formatOperator conf { head, tail } =
+  foldl go (flexGroup (format conf head)) tail
+  where
+  go doc (Tuple op b) =
+    doc `spaceBreak` indent do
+      formatOperator conf op
+        `flexSpaceBreak` indent (anchor (format conf b))
+
+formatHangingOperatorTree :: forall e a b c. Format b e a -> FormatHanging c e a -> FormatHanging (OperatorTree b c) e a
+formatHangingOperatorTree formatOperator format conf = go
+  where
+  go = case _ of
+    OpPure a -> format conf a
+    OpList head _ tail ->
+      hangConcatApp (go head)
+        (map (\(Tuple op b) -> hang (formatOperator conf op) (go b)) tail)
+
+formatParens :: forall e a b. Format b e a -> Format (Wrapped b) e a
+formatParens format conf (Wrapped { open, value, close }) =
+  formatToken conf open
+    <> anchor (format conf value)
+    <> formatToken conf close
+
+formatBasicList :: forall e a b. Format b e a -> Format (Delimited b) e a
+formatBasicList = formatDelimited space spaceBreak 2
+
+formatBasicListNonEmpty :: forall e a b. Format b e a -> Format (DelimitedNonEmpty b) e a
+formatBasicListNonEmpty = formatDelimitedNonEmpty space spaceBreak 2
+
+formatParenList :: forall e a b. Format b e a -> Format (Delimited b) e a
+formatParenList = formatDelimited softSpace softBreak 2
+
+formatParenListNonEmpty :: forall e a b. Format b e a -> Format (DelimitedNonEmpty b) e a
+formatParenListNonEmpty = formatDelimitedNonEmpty softSpace softBreak 2
+
+formatDelimited :: forall e a b. FormatSpace a -> FormatSpace a -> Int -> Format b e a -> Format (Delimited b) e a
+formatDelimited openSpace closeSpace alignment format conf (Wrapped { open, value, close }) = case value of
+  Nothing ->
+    formatEmptyList conf { open, close }
+  Just (Separated { head, tail }) ->
+    formatList openSpace closeSpace alignment format conf { open, head, tail, close }
+
+formatDelimitedNonEmpty :: forall e a b. FormatSpace a -> FormatSpace a -> Int -> Format b e a -> Format (DelimitedNonEmpty b) e a
+formatDelimitedNonEmpty openSpace closeSpace alignment format conf (Wrapped { open, value: Separated { head, tail }, close }) =
+  formatList openSpace closeSpace alignment format conf { open, head, tail, close }
+
+formatEmptyList :: forall e a. Format { open :: SourceToken, close :: SourceToken } e a
+formatEmptyList conf { open, close } = formatToken conf open <> formatToken conf close
+
+type FormatList b =
+  { open :: SourceToken
+  , head :: b
+  , tail :: Array (Tuple SourceToken b)
+  , close :: SourceToken
+  }
+
+formatList :: forall e a b. FormatSpace a -> FormatSpace a -> Int -> Format b e a -> Format (FormatList b) e a
+formatList openSpace closeSpace alignment format conf { open, head, tail, close } =
+  formatToken conf open
+    `openSpace`
+      formatListElem alignment format conf head
+    `softBreak`
+      formatListTail alignment format conf tail
+    `closeSpace`
+      formatToken conf close
+
+formatListElem :: forall e a b. Int -> Format b e a -> Format b e a
+formatListElem alignment format conf b = flexGroup (align alignment (anchor (format conf b)))
+
+formatListTail :: forall b e a. Int -> Format b e a -> Format (Array (Tuple SourceToken b)) e a
+formatListTail alignment format conf =
+  joinWithMap softBreak \(Tuple a b) ->
+    formatToken conf a `space` formatListElem alignment format conf b
+
+flatten :: forall a. Array (FormatDoc a) -> FormatDoc a
+flatten = joinWith (\a b -> a `space` indent (anchor b))
+
+paragraph :: forall a. Array (FormatDoc a) -> FormatDoc a
+paragraph = joinWith (\a b -> a `flexSpaceBreak` anchor b)
+
+declare :: forall a. FormatDoc a -> FormatDoc a -> FormatDoc a -> FormatDoc a
+declare label separator value =
+  label `space` indent do
+    anchor separator `flexSpaceBreak` anchor (flexGroup value)
+
+toQualifiedOperatorTree
+  :: forall a
+   . PrecedenceMap
+  -> OperatorNamespace
+  -> a
+  -> NonEmptyArray (Tuple (QualifiedName Operator) a)
+  -> OperatorTree (QualifiedName Operator) a
+toQualifiedOperatorTree precMap opNs =
+  toOperatorTree precMap \(QualifiedName qn) ->
+    QualifiedOperator qn."module" opNs qn.name
+
+overLabel :: forall a b c. (a -> b) -> Labeled a c -> Labeled b c
+overLabel k (Labeled lbl) = Labeled lbl { label = k lbl.label }
