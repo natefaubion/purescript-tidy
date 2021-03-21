@@ -4,7 +4,6 @@ module PureScript.CST.Tidy
   , UnicodePref(..)
   , TypeArrowPref(..)
   , Format
-  , FormatRecovered
   , formatModule
   , formatDecl
   , formatType
@@ -75,7 +74,6 @@ instance formatErrorRecoveredError :: FormatError RecoveredError where
       }
 
 type Format f e a = FormatConf e a -> f -> FormatDoc a
-type FormatRecovered f e a = FormatConf e a -> f e -> FormatDoc a
 type FormatHanging f e a = FormatConf e a -> f -> HangingDoc a
 type FormatSpace a = FormatDoc a -> FormatDoc a -> FormatDoc a
 
@@ -105,7 +103,7 @@ formatName conf (Name { token }) = formatToken conf token
 formatQualifiedName :: forall e a n. Format (QualifiedName n) e a
 formatQualifiedName conf (QualifiedName { token }) = formatToken conf token
 
-formatModule :: forall e a. FormatRecovered Module e a
+formatModule :: forall e a. Format (Module e) e a
 formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }) =
   joinWith break
     [ anchor (formatToken conf header.keyword) `space` indent do
@@ -119,7 +117,7 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
     , joinWithMap break (formatDecl conf) body.decls
     ]
 
-formatExport :: forall e a. FormatRecovered Export e a
+formatExport :: forall e a. Format (Export e) e a
 formatExport conf = case _ of
   ExportValue n ->
     formatName conf n
@@ -145,7 +143,7 @@ formatDataMembers conf = case _ of
   DataEnumerated ms ->
     formatParenList formatName conf ms
 
-formatImportDecl :: forall e a. FormatRecovered ImportDecl e a
+formatImportDecl :: forall e a. Format (ImportDecl e) e a
 formatImportDecl conf (ImportDecl imp) =
   formatToken conf imp.keyword `space` indent importDeclBody
   where
@@ -166,7 +164,7 @@ formatImportDecl conf (ImportDecl imp) =
   formatImportQualified (Tuple as qualName) =
     anchor (formatToken conf as) `space` anchor (formatName conf qualName)
 
-formatImport :: forall e a. FormatRecovered Import e a
+formatImport :: forall e a. Format (Import e) e a
 formatImport conf = case _ of
   ImportValue n ->
     formatName conf n
@@ -183,7 +181,7 @@ formatImport conf = case _ of
   ImportError e ->
     conf.formatError e
 
-formatDecl :: forall e a. FormatRecovered Declaration e a
+formatDecl :: forall e a. Format (Declaration e) e a
 formatDecl conf = case _ of
   DeclData head (Just (Tuple equals (Separated ctors))) ->
     if Array.null ctors.tail then
@@ -319,13 +317,13 @@ formatDecl conf = case _ of
   DeclError e ->
     conf.formatError e
 
-formatDataHead :: forall e a. FormatRecovered DataHead e a
+formatDataHead :: forall e a. Format (DataHead e) e a
 formatDataHead conf { keyword, name, vars } =
   formatToken conf keyword `space` indent do
     anchor (formatName conf name)
       `flexSpaceBreak` joinWithMap spaceBreak (formatTypeVarBinding conf) vars
 
-formatDataCtor :: forall e a. FormatRecovered DataCtor e a
+formatDataCtor :: forall e a. Format (DataCtor e) e a
 formatDataCtor conf (DataCtor { name, fields }) =
   formatName conf name `flexSpaceBreak` indent do
     joinWithMap spaceBreak (formatType conf) fields
@@ -376,7 +374,7 @@ formatOneOrDelimited format conf = case _ of
   One a -> format conf a
   Many as -> formatParenListNonEmpty format conf as
 
-formatInstance :: forall e a. FormatRecovered Instance e a
+formatInstance :: forall e a. Format (Instance e) e a
 formatInstance conf (Instance { head, body }) = case body of
   Nothing ->
     formatInstanceHead conf (Tuple head Nothing)
@@ -398,14 +396,14 @@ formatInstanceHead conf (Tuple hd mbWh) =
                 joinWithMap spaceBreak (formatType conf) hd.types
               `spaceBreak` foldMap (formatToken conf) mbWh
 
-formatInstanceBinding :: forall e a. FormatRecovered InstanceBinding e a
+formatInstanceBinding :: forall e a. Format (InstanceBinding e) e a
 formatInstanceBinding conf = case _ of
   InstanceBindingSignature sig ->
     formatSignature conf $ overLabel (formatName conf) sig
   InstanceBindingName vbf ->
     formatValueBinding conf vbf
 
-formatTypeVarBinding :: forall e a. FormatRecovered TypeVarBinding e a
+formatTypeVarBinding :: forall e a. Format (TypeVarBinding e) e a
 formatTypeVarBinding conf = case _ of
   TypeVarKinded w ->
     formatParens formatKindedTypeVarBinding conf w
@@ -470,7 +468,7 @@ formatHangingMonotype conf = case _ of
   TypeForall _ _ _ _ ->
     unsafeCrashWith "formatMonotype: TypeForall handled by formatPolytype"
 
-formatType :: forall e a. FormatRecovered Type e a
+formatType :: forall e a. Format (Type e) e a
 formatType conf = Hang.toFormatDoc <<< formatHangingType conf
 
 formatHangingType :: forall e a. FormatHanging (Type e) e a
@@ -507,7 +505,7 @@ formatHangingPolytype conf { init, last } = case conf.typeArrowPlacement of
     hangBreak $ joinWithMap spaceBreak (formatPolyArrowLast conf) init
       `spaceBreak` flexGroup (formatMonotype conf last)
 
-formatPolyArrowLast :: forall e a. FormatRecovered Poly e a
+formatPolyArrowLast :: forall e a. Format (Poly e) e a
 formatPolyArrowLast conf = case _ of
   PolyForall kw vars dot ->
     foldl go (formatToken conf kw) vars
@@ -552,7 +550,7 @@ formatRowLabeled conf (Labeled { label, separator, value }) =
     anchor (formatToken conf separator)
       `flexSpaceBreak` anchor (formatType conf value)
 
-formatExpr :: forall e a. FormatRecovered Expr e a
+formatExpr :: forall e a. Format (Expr e) e a
 formatExpr conf = Hang.toFormatDoc <<< formatHangingExpr conf
 
 formatHangingExpr :: forall e a. FormatHanging (Expr e) e a
@@ -700,7 +698,7 @@ formatElseIfChain conf = joinWithMap flexSpaceBreak case _ of
   Else kw1 expr ->
     Hang.toFormatDoc (formatToken conf kw1 `hang` formatHangingExpr conf expr)
 
-formatRecordUpdate :: forall e a. FormatRecovered RecordUpdate e a
+formatRecordUpdate :: forall e a. Format (RecordUpdate e) e a
 formatRecordUpdate conf = case _ of
   RecordUpdateLeaf n t expr ->
     declare (formatName conf n) (formatToken conf t) (flexGroup (formatExpr conf expr))
@@ -731,7 +729,7 @@ formatCaseBranch conf (Tuple (Separated { head, tail }) guarded) =
       (flexGroup (formatBinder conf head))
       tail
 
-formatGuardedExpr :: forall e a. FormatRecovered GuardedExpr e a
+formatGuardedExpr :: forall e a. Format (GuardedExpr e) e a
 formatGuardedExpr conf (GuardedExpr ge@{ patterns: Separated { head, tail }, where: Where { expr, bindings } }) =
   formatToken conf ge.bar
     `space`
@@ -745,7 +743,7 @@ formatGuardedExpr conf (GuardedExpr ge@{ patterns: Separated { head, tail }, whe
     formatListElem 2 formatPatternGuard conf head
       `softBreak` formatListTail 2 formatPatternGuard conf tail
 
-formatPatternGuard :: forall e a. FormatRecovered PatternGuard e a
+formatPatternGuard :: forall e a. Format (PatternGuard e) e a
 formatPatternGuard conf (PatternGuard { binder, expr }) = case binder of
   Nothing ->
     formatExpr conf expr
@@ -759,7 +757,7 @@ formatWhere conf (Tuple kw bindings) =
   formatToken conf kw
     `break` joinWithMap break (flexGroup <<< formatLetBinding conf) bindings
 
-formatLetBinding :: forall e a. FormatRecovered LetBinding e a
+formatLetBinding :: forall e a. Format (LetBinding e) e a
 formatLetBinding conf = case _ of
   LetBindingSignature (Labeled lbl) ->
     formatSignature conf $ Labeled lbl { label = formatName conf lbl.label }
@@ -775,7 +773,7 @@ formatLetBinding conf = case _ of
   LetBindingError e ->
     conf.formatError e
 
-formatValueBinding :: forall e a. FormatRecovered ValueBindingFields e a
+formatValueBinding :: forall e a. Format (ValueBindingFields e) e a
 formatValueBinding conf { name, binders, guarded } =
   case guarded of
     Unconditional tok (Where { expr, bindings }) ->
@@ -793,7 +791,7 @@ formatValueBinding conf { name, binders, guarded } =
         `flexSpaceBreak` indent (joinWithMap spaceBreak (anchor <<< formatBinder conf) binders)
         `flexSpaceBreak` indent (joinWithMap break (formatGuardedExpr conf) guards)
 
-formatDoStatement :: forall e a. FormatRecovered DoStatement e a
+formatDoStatement :: forall e a. Format (DoStatement e) e a
 formatDoStatement conf = case _ of
   DoLet kw bindings ->
     formatToken conf kw
@@ -809,7 +807,7 @@ formatDoStatement conf = case _ of
   DoError e ->
     conf.formatError e
 
-formatBinder :: forall e a. FormatRecovered Binder e a
+formatBinder :: forall e a. Format (Binder e) e a
 formatBinder conf = Hang.toFormatDoc <<< formatHangingBinder conf
 
 formatHangingBinder :: forall e a. FormatHanging (Binder e) e a
