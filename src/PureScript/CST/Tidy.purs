@@ -24,12 +24,13 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.String.CodeUnits as SCU
 import Data.Tuple (Tuple(..), fst)
+import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Tidy.Doc (FormatDoc, align, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, indent, joinWith, joinWithMap, leadingLineComment, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
+import PureScript.CST.Print (printToken)
+import PureScript.CST.Tidy.Doc (FormatDoc, align, anchor, blockComment, break, flexGroup, flexSpaceBreak, indent, joinWith, joinWithMap, leadingLineComment, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
 import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp)
 import PureScript.CST.Tidy.Hang as Hang
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), PrecedenceMap, QualifiedOperator(..), toOperatorTree)
-import PureScript.CST.Print (printToken)
 import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceToken, Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
 
 data UnicodePref
@@ -423,52 +424,57 @@ formatSignature conf (Labeled { label, separator, value }) =
     flexGroup $ anchor (formatToken conf separator)
       `spaceBreak` anchor (flexGroup (formatType conf value))
 
-formatMonotype :: forall e a. FormatRecovered Type e a
-formatMonotype conf = case _ of
+formatMonotype :: forall e a. Format (Type e) e a
+formatMonotype conf = Hang.toFormatDoc <<< formatHangingMonotype conf
+
+formatHangingMonotype :: forall e a. FormatHanging (Type e) e a
+formatHangingMonotype conf = case _ of
   TypeVar n ->
-    formatName conf n
+    hangBreak $ formatName conf n
   TypeConstructor n ->
-    formatQualifiedName conf n
+    hangBreak $ formatQualifiedName conf n
   TypeWildcard t ->
-    formatToken conf t
+    hangBreak $ formatToken conf t
   TypeHole n ->
-    formatName conf n
+    hangBreak $ formatName conf n
   TypeString t _ ->
-    formatToken conf t
+    hangBreak $ formatToken conf t
   TypeArrowName t ->
-    formatToken conf t
+    hangBreak $ formatToken conf t
   TypeOpName n ->
-    formatQualifiedName conf n
+    hangBreak $ formatQualifiedName conf n
   TypeRow row ->
-    formatRow softSpace spaceBreak conf row
+    hangBreak $ formatRow softSpace spaceBreak conf row
   TypeRecord row ->
-    formatRow space spaceBreak conf row
+    hangBreak $ formatRow space spaceBreak conf row
   TypeApp head tail ->
-    formatApps formatType conf { head, tail }
+    formatHangingType conf head
+      `hangApp` map (formatHangingType conf) tail
   TypeParens ty ->
-    formatParens formatType conf ty
+    hangBreak $ formatParens formatType conf ty
   TypeUnaryRow t ty ->
-    formatToken conf t `space` formatType conf ty
+    hangBreak $ formatToken conf t `space` formatType conf ty
   TypeKinded ty1 t ty2 ->
-    formatType conf ty1 `space` indent do
+    hangBreak $ formatType conf ty1 `space` indent do
       anchor (formatToken conf t)
         `flexSpaceBreak` anchor (formatType conf ty2)
-  TypeOp head tail ->
-    formatOperators formatType formatQualifiedName conf { head, tail }
+  TypeOp ty tys ->
+    formatHangingOperatorTree formatQualifiedName formatHangingType conf
+      $ toQualifiedOperatorTree conf.operators OperatorType ty tys
   TypeError e ->
-    conf.formatError e
-  -- Handled by formatPolytype
+    hangBreak $ conf.formatError e
   TypeArrow _ _ _ ->
-    mempty
-  -- Handled by formatPolytype
+    unsafeCrashWith "formatMonotype: TypeArrow handled by formatPolytype"
   TypeConstrained _ _ _ ->
-    mempty
-  -- Handled by formatPolytype
+    unsafeCrashWith "formatMonotype: TypeConstrained handled by formatPolytype"
   TypeForall _ _ _ _ ->
-    mempty
+    unsafeCrashWith "formatMonotype: TypeForall handled by formatPolytype"
 
 formatType :: forall e a. FormatRecovered Type e a
-formatType conf = formatPolytype conf <<< toPolytype
+formatType conf = Hang.toFormatDoc <<< formatHangingType conf
+
+formatHangingType :: forall e a. FormatHanging (Type e) e a
+formatHangingType conf = formatHangingPolytype conf <<< toPolytype
 
 data Poly e
   = PolyForall SourceToken (NonEmptyArray (TypeVarBinding e)) SourceToken
@@ -492,12 +498,13 @@ toPolytype = go []
     last ->
       { init, last }
 
-formatPolytype :: forall e a. FormatRecovered Polytype e a
-formatPolytype conf { init, last } = case conf.typeArrowPlacement of
+formatHangingPolytype :: forall e a. FormatHanging (Polytype e) e a
+formatHangingPolytype conf { init, last } = case conf.typeArrowPlacement of
   TypeArrowFirst ->
-    mempty
+    -- TODO
+    hangBreak $ mempty
   TypeArrowLast ->
-    joinWithMap spaceBreak (formatPolyArrowLast conf) init
+    hangBreak $ joinWithMap spaceBreak (formatPolyArrowLast conf) init
       `spaceBreak` flexGroup (formatMonotype conf last)
 
 formatPolyArrowLast :: forall e a. FormatRecovered Poly e a
@@ -803,51 +810,50 @@ formatDoStatement conf = case _ of
     conf.formatError e
 
 formatBinder :: forall e a. FormatRecovered Binder e a
-formatBinder conf = case _ of
+formatBinder conf = Hang.toFormatDoc <<< formatHangingBinder conf
+
+formatHangingBinder :: forall e a. FormatHanging (Binder e) e a
+formatHangingBinder conf = case _ of
   BinderWildcard t ->
-    formatToken conf t
+    hangBreak $ formatToken conf t
   BinderVar n ->
-    formatName conf n
+    hangBreak $ formatName conf n
   BinderNamed n t b ->
-    (formatName conf n <> indent (formatToken conf t)) `flexSoftBreak` indent (formatBinder conf b)
-  BinderConstructor n binders ->
+    (formatName conf n <> indent (formatToken conf t)) `hang` formatHangingBinder conf b
+  BinderConstructor n binders -> do
+    let ctorName = hangBreak $ formatQualifiedName conf n
     case NonEmptyArray.fromArray binders of
       Nothing ->
-        formatQualifiedName conf n
+        ctorName
       Just binders' ->
-        formatApps formatBinder conf
-          { head: BinderConstructor n []
-          , tail: binders'
-          }
+        hangApp ctorName (map (formatHangingBinder conf) binders')
   BinderBoolean t _ ->
-    formatToken conf t
+    hangBreak $ formatToken conf t
   BinderChar t _ ->
-    formatToken conf t
+    hangBreak $ formatToken conf t
   BinderString t _ ->
-    formatToken conf t
+    hangBreak $ formatToken conf t
   BinderInt neg t _ ->
-    foldMap (formatToken conf) neg <> formatToken conf t
+    hangBreak $ foldMap (formatToken conf) neg <> formatToken conf t
   BinderNumber neg t _ ->
-    foldMap (formatToken conf) neg <> formatToken conf t
+    hangBreak $ foldMap (formatToken conf) neg <> formatToken conf t
   BinderArray binders ->
-    formatBasicList formatBinder conf binders
+    hangBreak $ formatBasicList formatBinder conf binders
   BinderRecord binders ->
-    formatBasicList (formatRecordLabeled formatBinder) conf binders
+    hangBreak $ formatBasicList (formatRecordLabeled formatBinder) conf binders
   BinderParens binder ->
-    formatParens formatBinder conf binder
+    hangBreak $ formatParens formatBinder conf binder
   BinderTyped binder separator ty ->
-    formatSignature conf $ Labeled
+    hangBreak $ formatSignature conf $ Labeled
       { label: formatBinder conf binder
       , separator
       , value: ty
       }
   BinderOp binder binders ->
-    formatOperators formatBinder formatQualifiedName conf
-      { head: binder
-      , tail: binders
-      }
+    formatHangingOperatorTree formatQualifiedName formatHangingBinder conf
+      $ toQualifiedOperatorTree conf.operators OperatorValue binder binders
   BinderError e ->
-    conf.formatError e
+    hangBreak $ conf.formatError e
 
 formatRecordLabeled :: forall b e a. Format b e a -> Format (RecordLabeled b) e a
 formatRecordLabeled format conf = case _ of
@@ -857,22 +863,6 @@ formatRecordLabeled format conf = case _ of
     formatName conf label <> indent do
       flexGroup $ anchor (formatToken conf separator)
         `spaceBreak` anchor (flexGroup (format conf value))
-
-formatApps :: forall e a b. Format b e a -> Format { head :: b, tail :: NonEmptyArray b } e a
-formatApps format conf { head, tail } =
-  foldl go (flexGroup (format conf head)) tail
-  where
-  go doc b =
-    doc `flexSpaceBreak` indent (format conf b)
-
-formatOperators :: forall e a b c. Format b e a -> Format c e a -> Format { head :: b, tail :: NonEmptyArray (Tuple c b) } e a
-formatOperators format formatOperator conf { head, tail } =
-  foldl go (flexGroup (format conf head)) tail
-  where
-  go doc (Tuple op b) =
-    doc `spaceBreak` indent do
-      formatOperator conf op
-        `flexSpaceBreak` indent (anchor (format conf b))
 
 formatHangingOperatorTree :: forall e a b c. Format b e a -> FormatHanging c e a -> FormatHanging (OperatorTree b c) e a
 formatHangingOperatorTree formatOperator format conf = go
