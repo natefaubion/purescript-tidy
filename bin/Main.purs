@@ -4,7 +4,7 @@ import Prelude
 
 import Data.Array as Array
 import Data.Either (Either(..))
-import Data.Foldable (findMap)
+import Data.Foldable (elem, findMap)
 import Data.Int as Int
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
@@ -25,8 +25,7 @@ import Node.Process as Process
 import Node.Stream as Stream
 import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (printParseError)
-import PureScript.CST.Tidy (defaultFormatConf, formatModule)
-import PureScript.CST.Tidy.Doc (toDoc)
+import PureScript.CST.Tidy (UnicodeOption(..), defaultFormatOptions, formatModule, toDoc)
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), PrecedenceMap, remapOperators)
 import PureScript.CST.Types (ModuleName(..), Operator(..))
 
@@ -44,6 +43,11 @@ main = launchAff_ do
   args <- Array.drop 1 <$> liftEffect Process.argv
   contents <- readStdin
   let
+    unicode
+      | elem "--unicode-never" args = UnicodeNever
+      | elem "--unicode-always" args = UnicodeAlways
+      | otherwise = UnicodeSource
+
     pageWidth = fromMaybe top $ findMap (String.stripPrefix (Pattern "--width=") >=> Int.fromString) args
     ribbonRatio = fromMaybe 1.0 $ findMap (String.stripPrefix (Pattern "--ribbon=") >=> Number.fromString) args
     indentWidth = fromMaybe 2 $ findMap (String.stripPrefix (Pattern "--indent=") >=> Int.fromString) args
@@ -51,11 +55,11 @@ main = launchAff_ do
     print = Dodo.print Dodo.plainText { pageWidth, ribbonRatio, indentWidth, indentUnit }
   case parseModule contents of
     ParseSucceeded ok -> do
-      let conf = defaultFormatConf { operators = remapOperators defaultOperators ok }
-      Console.log $ print $ toDoc $ formatModule conf ok
+      let opts = defaultFormatOptions { operators = remapOperators defaultOperators ok, unicode = unicode }
+      Console.log $ print $ toDoc $ formatModule opts ok
     ParseSucceededWithErrors ok _ -> do
-      let conf = defaultFormatConf { operators = remapOperators defaultOperators ok }
-      Console.log $ print $ toDoc $ formatModule conf ok
+      let opts = defaultFormatOptions { operators = remapOperators defaultOperators ok, unicode = unicode  }
+      Console.log $ print $ toDoc $ formatModule opts ok
     ParseFailed err ->
       Console.log $ printParseError err.error
 

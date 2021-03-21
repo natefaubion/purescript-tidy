@@ -27,9 +27,8 @@ import Node.Path as Path
 import Node.Stream as Stream
 import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (printParseError)
-import PureScript.CST.Tidy (class FormatError, FormatConf, defaultFormatConf)
+import PureScript.CST.Tidy (class FormatError, FormatOptions, defaultFormatOptions)
 import PureScript.CST.Tidy as Tidy
-import PureScript.CST.Tidy.Doc as Tidy.Doc
 import PureScript.CST.Types (Module)
 
 data SnapshotResult
@@ -88,7 +87,7 @@ snapshotFormat directory accept mbPattern = do
   runSnapshotForModule :: forall e. FormatError e => String -> FilePath -> Module e -> Aff SnapshotTest
   runSnapshotForModule name outputPath mod = do
     let printOptions = twoSpaces { pageWidth = top :: Int }
-    let formatOptions = defaultFormatConf
+    let formatOptions = defaultFormatOptions
     let output = formatModule printOptions formatOptions mod
     let acceptOutput = writeFile outputPath =<< liftEffect (Buffer.fromString output UTF8)
     savedOutputFile <- try $ readFile outputPath
@@ -108,8 +107,8 @@ snapshotFormat directory accept mbPattern = do
           diffOutput <- liftEffect $ bufferToUTF8 diffBuff
           pure { name, output, result: Failed diffOutput }
 
-  formatModule :: forall e a. PrintOptions -> FormatConf e a -> Module e -> String
-  formatModule opts conf = Dodo.print Dodo.plainText opts <<< Tidy.Doc.toDoc <<< Tidy.formatModule conf
+  formatModule :: forall e a. PrintOptions -> FormatOptions e a -> Module e -> String
+  formatModule opts conf = Dodo.print Dodo.plainText opts <<< Tidy.toDoc <<< Tidy.formatModule conf
 
 execWithStdin :: String -> String -> Aff ExecResult
 execWithStdin command input = makeAff \k -> do

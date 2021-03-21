@@ -1,8 +1,7 @@
 module PureScript.CST.Tidy
-  ( FormatConf
-  , defaultFormatConf
-  , UnicodePref(..)
-  , TypeArrowPref(..)
+  ( FormatOptions
+  , defaultFormatOptions
+  , TypeArrowOption(..)
   , Format
   , formatModule
   , formatDecl
@@ -11,6 +10,7 @@ module PureScript.CST.Tidy
   , formatBinder
   , class FormatError
   , formatError
+  , module Exports
   ) where
 
 import Prelude
@@ -25,35 +25,30 @@ import Data.String.CodeUnits as SCU
 import Data.Tuple (Tuple(..), fst)
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Print (printToken)
 import PureScript.CST.Tidy.Doc (FormatDoc, align, anchor, blockComment, break, flexGroup, flexSpaceBreak, indent, joinWith, joinWithMap, leadingLineComment, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
+import PureScript.CST.Tidy.Doc (FormatDoc, toDoc) as Exports
 import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp)
 import PureScript.CST.Tidy.Hang as Hang
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), PrecedenceMap, QualifiedOperator(..), toOperatorTree)
+import PureScript.CST.Tidy.Token (UnicodeOption(..), printToken)
+import PureScript.CST.Tidy.Token (UnicodeOption(..)) as Exports
 import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceToken, Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
 
-data UnicodePref
-  = UnicodeSource
-  | UnicodeAlways
-  | UnicodeNever
-
-derive instance eqUnicodePref :: Eq UnicodePref
-
-data TypeArrowPref
+data TypeArrowOption
   = TypeArrowFirst
   | TypeArrowLast
 
-derive instance eqTypeArrowPref :: Eq TypeArrowPref
+derive instance eqTypeArrowOption :: Eq TypeArrowOption
 
-type FormatConf e a =
+type FormatOptions e a =
   { formatError :: e -> FormatDoc a
-  , unicode :: UnicodePref
-  , typeArrowPlacement :: TypeArrowPref
+  , unicode :: UnicodeOption
+  , typeArrowPlacement :: TypeArrowOption
   , operators :: PrecedenceMap
   }
 
-defaultFormatConf :: forall e a. FormatError e => FormatConf e a
-defaultFormatConf =
+defaultFormatOptions :: forall e a. FormatError e => FormatOptions e a
+defaultFormatOptions =
   { formatError
   , unicode: UnicodeSource
   , typeArrowPlacement: TypeArrowLast
@@ -73,8 +68,8 @@ instance formatErrorRecoveredError :: FormatError RecoveredError where
       { unicode: UnicodeSource
       }
 
-type Format f e a = FormatConf e a -> f -> FormatDoc a
-type FormatHanging f e a = FormatConf e a -> f -> HangingDoc a
+type Format f e a = FormatOptions e a -> f -> FormatDoc a
+type FormatHanging f e a = FormatOptions e a -> f -> HangingDoc a
 type FormatSpace a = FormatDoc a -> FormatDoc a -> FormatDoc a
 
 formatComment :: forall l a c. (String -> FormatDoc a) -> c -> Comment l -> FormatDoc a -> FormatDoc a
@@ -89,11 +84,11 @@ formatComment lineComment _ com next = case com of
   Space n ->
     next
 
-formatToken :: forall a r. { unicode :: UnicodePref | r } -> SourceToken -> FormatDoc a
+formatToken :: forall a r. { unicode :: UnicodeOption | r } -> SourceToken -> FormatDoc a
 formatToken conf tok = do
   let
     token =
-      text (printToken tok.value)
+      text (printToken conf.unicode tok.value)
         `space` foldr (formatComment trailingLineComment conf) mempty tok.trailingComments
   foldr (formatComment leadingLineComment conf) token tok.leadingComments
 
@@ -929,10 +924,11 @@ formatListTail alignment format conf =
     formatToken conf a `space` formatListElem alignment format conf b
 
 flatten :: forall a. Array (FormatDoc a) -> FormatDoc a
-flatten = joinWith (\a b -> a `space` indent (anchor b))
-
-paragraph :: forall a. Array (FormatDoc a) -> FormatDoc a
-paragraph = joinWith (\a b -> a `flexSpaceBreak` anchor b)
+flatten = Array.uncons >>> foldMap format
+  where
+  format { head, tail } =
+    head `space` indent do
+      joinWithMap space anchor tail
 
 declare :: forall a. FormatDoc a -> FormatDoc a -> FormatDoc a -> FormatDoc a
 declare label separator value =
