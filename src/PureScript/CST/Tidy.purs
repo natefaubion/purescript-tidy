@@ -25,13 +25,13 @@ import Data.String.CodeUnits as SCU
 import Data.Tuple (Tuple(..), fst)
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Tidy.Doc (FormatDoc, align, anchor, blockComment, break, flexGroup, flexSpaceBreak, indent, joinWith, joinWithMap, leadingLineComment, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
+import PureScript.CST.Tidy.Doc (FormatDoc, align, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, indent, joinWith, joinWithMap, leadingLineComment, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
 import PureScript.CST.Tidy.Doc (FormatDoc, toDoc) as Exports
 import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp)
 import PureScript.CST.Tidy.Hang as Hang
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), PrecedenceMap, QualifiedOperator(..), toOperatorTree)
-import PureScript.CST.Tidy.Token (UnicodeOption(..), printToken)
 import PureScript.CST.Tidy.Token (UnicodeOption(..)) as Exports
+import PureScript.CST.Tidy.Token (UnicodeOption(..), printToken)
 import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceToken, Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
 
 data TypeArrowOption
@@ -812,7 +812,7 @@ formatHangingBinder conf = case _ of
   BinderVar n ->
     hangBreak $ formatName conf n
   BinderNamed n t b ->
-    (formatName conf n <> indent (formatToken conf t)) `hang` formatHangingBinder conf b
+    hangBreak $ formatName conf n <> (anchor (formatToken conf t) `flexSoftBreak` formatBinder conf b)
   BinderConstructor n binders -> do
     let ctorName = hangBreak $ formatQualifiedName conf n
     case NonEmptyArray.fromArray binders of
