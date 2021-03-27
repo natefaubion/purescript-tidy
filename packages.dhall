@@ -1,11 +1,11 @@
 let upstream =
-      https://github.com/purescript/package-sets/releases/download/psc-0.13.8-20210118/packages.dhall sha256:a59c5c93a68d5d066f3815a89f398bcf00e130a51cb185b2da29b20e2d8ae115
+      https://github.com/purescript/package-sets/releases/download/psc-0.14.0-20210324/packages.dhall sha256:b4564d575da6aed1c042ca7936da97c8b7a29473b63f4515f09bb95fae8dddab
 
 let overrides = {=}
 
 let additions =
-  { purescript-language-cst-parser =
-      { dependencies =
+      { purescript-language-cst-parser =
+        { dependencies =
           [ "arrays"
           , "const"
           , "effect"
@@ -21,24 +21,32 @@ let additions =
           , "tuples"
           , "typelevel-prelude"
           ]
-      , repo =
-          "https://github.com/natefaubion/purescript-language-cst-parser.git"
-      , version =
-          "v0.5.1"
-      }
-  , dodo-printer =
-      { dependencies =
-          [ "ansi"
-          , "foldable-traversable"
+        , repo =
+            "https://github.com/natefaubion/purescript-language-cst-parser.git"
+        , version = "v0.7.1"
+        }
+      , dodo-printer =
+        { dependencies =
+          [ "ansi", "foldable-traversable", "lists", "maybe", "strings" ]
+        , repo = "https://github.com/natefaubion/purescript-dodo-printer.git"
+        , version = "v2.0.0"
+        }
+      , node-glob-basic =
+        { dependencies =
+          [ "aff"
+          , "console"
+          , "effect"
           , "lists"
           , "maybe"
+          , "node-fs-aff"
+          , "node-path"
+          , "node-process"
+          , "ordered-collections"
           , "strings"
           ]
-      , repo =
-          "https://github.com/natefaubion/purescript-dodo-printer.git"
-      , version =
-          "v1.1.0"
+        , repo = "https://github.com/natefaubion/purescript-node-glob-basic.git"
+        , version = "v1.1.0"
+        }
       }
-  }
 
 in  upstream // overrides // additions

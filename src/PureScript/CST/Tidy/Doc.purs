@@ -27,9 +27,8 @@ module PureScript.CST.Tidy.Doc
 
 import Prelude
 
-import Data.Array (foldl)
 import Data.Array as Array
-import Data.Foldable (class Foldable)
+import Data.Foldable (class Foldable, foldl)
 import Data.String (Pattern(..))
 import Data.String as String
 import Data.Tuple (Tuple(..))

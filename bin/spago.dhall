@@ -5,6 +5,7 @@
   , "dodo-printer"
   , "effect"
   , "node-fs-aff"
+  , "node-glob-basic"
   , "node-process"
   , "psci-support"
   , "purescript-language-cst-parser"

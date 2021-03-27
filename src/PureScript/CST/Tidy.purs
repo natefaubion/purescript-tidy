@@ -14,11 +14,12 @@ module PureScript.CST.Tidy
   ) where
 
 import Prelude
+import Prim hiding (Row,Type)
 
-import Data.Array (foldMap, foldl, foldr)
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NonEmptyArray
+import Data.Foldable (foldMap, foldl, foldr)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.String.CodeUnits as SCU
