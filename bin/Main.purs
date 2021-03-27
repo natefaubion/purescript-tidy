@@ -15,6 +15,7 @@ import Data.Number as Number
 import Data.String (Pattern(..))
 import Data.String as String
 import Data.Tuple (Tuple(..), snd, uncurry)
+import DefaultOperators (defaultOperators)
 import Dodo as Dodo
 import Effect (Effect)
 import Effect.Aff (Aff, launchAff_, makeAff)
@@ -41,7 +42,7 @@ main :: Effect Unit
 main = launchAff_ do
   args <- Array.drop 1 <$> liftEffect Process.argv
   case Array.uncons args of
-    Just { head, tail } | head == "gen-operator-table" ->
+    Just { head, tail } | head == "generate-operators" ->
       operatorTableCommand tail
     _ ->
       formatCommand args
@@ -63,7 +64,8 @@ formatCommand args = do
 
   operators <-
     case findMap (String.stripPrefix (Pattern "--operators=")) args of
-      Nothing -> pure Map.empty
+      Nothing ->
+        pure $ parseOperatorTable defaultOperators
       Just path -> do
         table <- liftEffect <<< Buffer.toString UTF8 =<< FS.readFile path
         pure $ parseOperatorTable $ String.split (Pattern "\n") table
