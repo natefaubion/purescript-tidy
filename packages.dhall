@@ -47,6 +47,18 @@ let additions =
         , repo = "https://github.com/natefaubion/purescript-node-glob-basic.git"
         , version = "v1.1.0"
         }
+      , argparse-basic =
+        { dependencies =
+          [ "either"
+          , "foldable-traversable"
+          , "lists"
+          , "maybe"
+          , "record"
+          , "strings"
+          ]
+        , repo = "https://github.com/natefaubion/purescript-argparse-basic.git"
+        , version = "v1.0.0"
+        }
       }
 
 in  upstream // overrides // additions

@@ -1,6 +1,7 @@
 { name = "purescript-tidy-cli"
 , dependencies =
   [ "aff"
+  , "argparse-basic"
   , "console"
   , "dodo-printer"
   , "effect"

@@ -5,7 +5,7 @@ import Prelude
 import Data.Array (mapWithIndex)
 import Data.Array as Array
 import Data.Maybe (Maybe(..))
-import Data.String (Pattern(..), Replacement(..))
+import Data.String (Pattern(..))
 import Data.String as String
 import Effect (Effect)
 import Node.Buffer as Buffer
