@@ -12,6 +12,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Monoid (power)
 import Data.Newtype (unwrap)
+import Data.Set as Set
 import Data.String (Pattern(..))
 import Data.String as String
 import Data.Tuple (Tuple(..), snd, uncurry)
@@ -25,15 +26,22 @@ import Effect.Ref as Ref
 import Node.Buffer as Buffer
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
-import Node.Glob.Basic (expandGlobsCwd)
+import Node.FS.Stats as Stats
+import Node.FS.Sync as Sync
+import Node.Glob.Basic (expandGlobsCwd, expandGlobsWithStatsCwd)
+import Node.Path (FilePath)
 import Node.Process as Process
 import Node.Stream as Stream
+import Node.WorkerBees (Worker)
+import Node.WorkerBees as Worker
+import Node.WorkerBees.Aff.Pool (poolTraverse)
+import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST (RecoveredParserResult(..), parseModule, toRecovered)
 import PureScript.CST.Errors (ParseError, printParseError)
 import PureScript.CST.Lexer as Lexer
 import PureScript.CST.ModuleGraph (ModuleSort(..), sortModules)
 import PureScript.CST.Tidy (TypeArrowOption(..), UnicodeOption(..), defaultFormatOptions, formatModule, toDoc)
-import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), Precedence, PrecedenceMap, QualifiedOperator(..), insertOperator, lookupOperator, remapOperators)
+import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), Precedence, QualifiedOperator(..), PrecedenceMap, insertOperator, lookupOperator, remapOperators)
 import PureScript.CST.TokenStream (TokenStep(..), TokenStream)
 import PureScript.CST.TokenStream as TokenStream
 import PureScript.CST.Types (Declaration(..), Export(..), FixityOp(..), Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), Operator(..), Separated(..), Token(..), Wrapped(..))
@@ -49,7 +57,7 @@ type FormatOptions =
 
 data Command
   = GenerateOperators (Array String)
-  | FormatInPlace FormatOptions (Array String)
+  | FormatInPlace FormatOptions Int (Array String)
   | Format FormatOptions
 
 parser :: ArgParser Command
@@ -63,7 +71,15 @@ parser =
     , Arg.command [ "format-in-place" ]
         "Format source files in place."
         do
-          FormatInPlace <$> formatOptions <*> pursGlobs
+          FormatInPlace
+            <$> formatOptions
+            <*>
+              do
+                Arg.argument [ "--threads", "-t" ]
+                  "Number of worker threads to use.\nDefaults to 4."
+                  # Arg.int
+                  # Arg.default 4
+            <*> pursGlobs
             <* Arg.flagHelp
     , Arg.command [ "format" ]
         "Format input over stdin."
@@ -148,14 +164,59 @@ main = launchAff_ do
       case cmd of
         GenerateOperators globs ->
           generateOperatorsCommand globs
-        FormatInPlace options globs ->
-          mempty
-        Format options ->
-          formatCommand options
+        FormatInPlace options numThreads globs -> do
+          operators <- readOperatorTable options.operators
+          paths <- expandGlobsWithStatsCwd globs
+          let
+            files :: Array String
+            files =
+              paths
+                # Map.filter Stats.isFile
+                # Map.keys
+                # Set.toUnfoldable
 
-formatCommand :: FormatOptions -> Aff Unit
-formatCommand args = do
-  contents <- readStdin
+            workerConfig :: WorkerConfig
+            workerConfig =
+              { indent: options.indent
+              , operators
+              , ribbon: options.ribbon
+              , typeArrowPlacement:
+                  case options.typeArrowPlacement of
+                    TypeArrowFirst -> "arrow-first"
+                    TypeArrowLast -> "arrow-last"
+              , unicode:
+                  case options.unicode of
+                    UnicodeSource -> "source"
+                    UnicodeAlways -> "always"
+                    UnicodeNever -> "never"
+              , width: options.width
+              }
+
+          results <- poolTraverse formatWorker workerConfig numThreads files
+          for_ results \{ filePath, error } ->
+            unless (String.null error) do
+              Console.error $ filePath <> ":\n  " <> error <> "\n"
+
+        Format options -> do
+          operators <- parseOperatorTable <$> readOperatorTable options.operators
+          contents <- readStdin
+          case formatCommand options operators contents of
+            Left err -> do
+              Console.error $ printParseError err
+              liftEffect $ Process.exit 1
+            Right str ->
+              Console.log str
+
+readOperatorTable :: Maybe FilePath -> Aff (Array String)
+readOperatorTable = case _ of
+  Nothing ->
+    pure defaultOperators
+  Just path -> do
+    table <- liftEffect <<< Buffer.toString UTF8 =<< FS.readFile path
+    pure $ String.split (Pattern "\n") table
+
+formatCommand :: FormatOptions -> PrecedenceMap -> String -> Either ParseError String
+formatCommand args operators contents = do
   let
     print = Dodo.print Dodo.plainText
       { pageWidth: args.width
@@ -164,23 +225,68 @@ formatCommand args = do
       , indentUnit: power " " args.indent
       }
 
-  operators <-
-    case args.operators of
-      Nothing ->
-        pure $ parseOperatorTable defaultOperators
-      Just path -> do
-        table <- liftEffect <<< Buffer.toString UTF8 =<< FS.readFile path
-        pure $ parseOperatorTable $ String.split (Pattern "\n") table
-
   case parseModule contents of
     ParseSucceeded ok -> do
-      let opts = defaultFormatOptions { operators = remapOperators operators ok, typeArrowPlacement = args.typeArrowPlacement, unicode = args.unicode }
-      Console.log $ print $ toDoc $ formatModule opts ok
+      let
+        opts = defaultFormatOptions
+          { operators = remapOperators operators ok
+          , typeArrowPlacement = args.typeArrowPlacement
+          , unicode = args.unicode
+          }
+      Right $ print $ toDoc $ formatModule opts ok
     ParseSucceededWithErrors ok _ -> do
-      let opts = defaultFormatOptions { operators = remapOperators operators ok, typeArrowPlacement = args.typeArrowPlacement, unicode = args.unicode  }
-      Console.log $ print $ toDoc $ formatModule opts ok
+      let
+        opts =
+          defaultFormatOptions
+            { operators = remapOperators operators ok
+            , typeArrowPlacement = args.typeArrowPlacement
+            , unicode = args.unicode
+            }
+      Right $ print $ toDoc $ formatModule opts ok
     ParseFailed err ->
-      Console.log $ printParseError err.error
+      Left err.error
+
+type WorkerConfig =
+  { indent :: Int
+  , operators :: Array String
+  , ribbon :: Number
+  , typeArrowPlacement :: String
+  , unicode :: String
+  , width :: Int
+  }
+
+formatWorker :: Worker WorkerConfig FilePath { filePath :: FilePath, error :: String }
+formatWorker = Worker.make \{ receive, reply, workerData } -> do
+  let
+    operators =
+      parseOperatorTable workerData.operators
+
+    formatOptions =
+      { indent: workerData.indent
+      , operators: Nothing
+      , ribbon: workerData.ribbon
+      , typeArrowPlacement:
+          case workerData.typeArrowPlacement of
+            "arrow-first" -> TypeArrowFirst
+            "arrow-last" -> TypeArrowLast
+            _ -> unsafeCrashWith "Unknown typeArrowPlacement"
+      , unicode:
+          case workerData.unicode of
+            "source" -> UnicodeSource
+            "always" -> UnicodeAlways
+            "never" -> UnicodeNever
+            _ -> unsafeCrashWith "Unknown unicode"
+      , width: workerData.width
+      }
+
+  receive \filePath -> do
+    contents <- Sync.readTextFile UTF8 filePath
+    case formatCommand formatOptions operators contents of
+      Right formatted -> do
+        Sync.writeTextFile UTF8 filePath formatted
+        reply { filePath, error: "" }
+      Left err ->
+        reply { filePath, error: printParseError err }
 
 readStdin :: Aff String
 readStdin = makeAff \k -> do

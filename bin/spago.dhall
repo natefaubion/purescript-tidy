@@ -8,6 +8,7 @@
   , "node-fs-aff"
   , "node-glob-basic"
   , "node-process"
+  , "node-workerbees"
   , "psci-support"
   , "purescript-language-cst-parser"
   ]

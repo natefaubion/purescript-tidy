@@ -47,6 +47,23 @@ let additions =
         , repo = "https://github.com/natefaubion/purescript-node-glob-basic.git"
         , version = "v1.1.0"
         }
+      , node-workerbees =
+        { dependencies =
+          [ "aff"
+          , "argonaut-core"
+          , "arraybuffer-types"
+          , "avar"
+          , "effect"
+          , "either"
+          , "exceptions"
+          , "maybe"
+          , "newtype"
+          , "parallel"
+          , "variant"
+          ]
+        , repo = "https://github.com/natefaubion/purescript-node-workerbees.git"
+        , version = "v0.1.1"
+        }
       , argparse-basic =
         { dependencies =
           [ "either"
