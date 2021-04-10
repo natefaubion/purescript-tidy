@@ -133,9 +133,9 @@ remapOperators = goModule
 
   goImport modName = case _ of
     ImportOp (Name { name: op }) ->
-      [QualifiedOperator (Just modName) OperatorValue op]
+      [ QualifiedOperator (Just modName) OperatorValue op ]
     ImportTypeOp _ (Name { name: op }) ->
-      [QualifiedOperator (Just modName) OperatorType op]
+      [ QualifiedOperator (Just modName) OperatorType op ]
     _ ->
       []
 

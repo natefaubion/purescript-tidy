@@ -111,8 +111,8 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
       HangGroup
         (Dodo.flexSelect
           (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))
-            docGroup
-            docIndent)
+          docGroup
+          docIndent)
         (forceBreaks n1 <> doc1 <> docIndent)
         (FormatDoc' fl1 n1 m1 (Dodo.flexGroup doc1 <> docIndent) fr2)
 

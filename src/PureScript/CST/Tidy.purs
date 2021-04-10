@@ -14,7 +14,7 @@ module PureScript.CST.Tidy
   ) where
 
 import Prelude
-import Prim hiding (Row,Type)
+import Prim hiding (Row, Type)
 
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
@@ -97,7 +97,7 @@ instance formatErrorRecoveredError :: FormatError RecoveredError where
     formatRecoveredComments :: forall a b. Int -> Array (Comment a) -> Dodo.Doc b
     formatRecoveredComments ind = _.doc <<< foldl (goComments ind) { line: false, doc: mempty }
 
-    goComments :: forall a b . Int -> { line :: Boolean, doc :: Dodo.Doc b } -> Comment a -> { line :: Boolean, doc :: Dodo.Doc b }
+    goComments :: forall a b. Int -> { line :: Boolean, doc :: Dodo.Doc b } -> Comment a -> { line :: Boolean, doc :: Dodo.Doc b }
     goComments ind acc = case _ of
       Comment str
         | SCU.take 2 str == "--" ->
@@ -168,7 +168,7 @@ formatExport conf = case _ of
     formatName conf n
   ExportOp n ->
     formatName conf n
-  ExportType n members->
+  ExportType n members ->
     flexGroup $ formatName conf n `softBreak` indent (foldMap (formatDataMembers conf) members)
   ExportTypeOp t n ->
     formatToken conf t `space` formatName conf n
@@ -256,7 +256,7 @@ formatDecl conf = case _ of
     declare
       (formatDataHead conf head)
       (formatToken conf equals)
-      (formatDataCtor conf (DataCtor { name, fields: [ ty ]}))
+      (formatDataCtor conf (DataCtor { name, fields: [ ty ] }))
 
   DeclRole kw1 kw2 name rls ->
     flatten $ words <> NonEmptyArray.toArray roles
@@ -734,11 +734,12 @@ formatHangingExpr conf = case _ of
   ExprAdo adoBlock ->
     hang
       (formatToken conf adoBlock.keyword)
-      (hangBreak (joinWithMap break (formatDoStatement conf) adoBlock.statements
-        `flexSpaceBreak`
-          (formatToken conf adoBlock.in
-            `flexSpaceBreak`
-              indent (formatExpr conf adoBlock.result))))
+      (hangBreak
+        (joinWithMap break (formatDoStatement conf) adoBlock.statements
+          `flexSpaceBreak`
+            (formatToken conf adoBlock.in
+              `flexSpaceBreak`
+                indent (formatExpr conf adoBlock.result))))
 
   ExprError e ->
     hangBreak $ conf.formatError e

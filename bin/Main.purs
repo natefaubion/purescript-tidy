@@ -301,9 +301,10 @@ readStdin = makeAff \k -> do
 generateOperatorsCommand :: Array String -> Aff Unit
 generateOperatorsCommand globs = do
   sourcePaths <- expandGlobsCwd globs
-  modules <- sourcePaths # Array.fromFoldable # parTraverse \path -> do
-    contents <- liftEffect <<< Buffer.toString UTF8 =<< FS.readFile path
-    pure $ parseModule contents
+  modules <-
+    sourcePaths # Array.fromFoldable # parTraverse \path -> do
+      contents <- liftEffect <<< Buffer.toString UTF8 =<< FS.readFile path
+      pure $ parseModule contents
 
   let
     parsedModules = modules # Array.mapMaybe case _ of
