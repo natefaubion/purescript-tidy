@@ -20,6 +20,7 @@ module PureScript.CST.Tidy.Doc
   , flexSoftSpace
   , flexSoftBreak
   , flexGroup
+  , fromDoc
   , toDoc
   , joinWithMap
   , joinWith
@@ -52,6 +53,9 @@ instance semigroupFormatDoc :: Semigroup (FormatDoc a) where
 
 instance monoidFormatDoc :: Monoid (FormatDoc a) where
   mempty = FormatEmpty
+
+fromDoc :: forall a. Doc a -> FormatDoc a
+fromDoc doc = FormatDoc ForceNone 0 false doc ForceNone
 
 text :: forall a. String -> FormatDoc a
 text str = FormatDoc ForceNone 0 false (Dodo.text str) ForceNone

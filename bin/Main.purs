@@ -32,7 +32,7 @@ import PureScript.CST (RecoveredParserResult(..), parseModule, toRecovered)
 import PureScript.CST.Errors (ParseError, printParseError)
 import PureScript.CST.Lexer as Lexer
 import PureScript.CST.ModuleGraph (ModuleSort(..), sortModules)
-import PureScript.CST.Tidy (UnicodeOption(..), defaultFormatOptions, formatModule, toDoc)
+import PureScript.CST.Tidy (TypeArrowOption(..), UnicodeOption(..), defaultFormatOptions, formatModule, toDoc)
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), Precedence, PrecedenceMap, QualifiedOperator(..), insertOperator, lookupOperator, remapOperators)
 import PureScript.CST.TokenStream (TokenStep(..), TokenStream)
 import PureScript.CST.TokenStream as TokenStream
@@ -42,6 +42,7 @@ type FormatOptions =
   { indent :: Int
   , operators :: Maybe String
   , ribbon :: Number
+  , typeArrowPlacement :: TypeArrowOption
   , unicode :: UnicodeOption
   , width :: Int
   }
@@ -90,6 +91,16 @@ parser =
             "The ratio of printable width to maximum width.\nFrom 0 to 1. Defaults to 1."
             # Arg.number
             # Arg.default 1.0
+      , typeArrowPlacement:
+          Arg.choose "type arrow option"
+            [ Arg.flag [ "--arrow-first", "-af" ]
+                "Type signatures put arrows first on the line."
+                $> TypeArrowFirst
+            , Arg.flag [ "--arrow-last", "-al" ]
+                "Type signatures put arrows last on the line.\nDefault."
+                $> TypeArrowLast
+            ]
+            # Arg.default TypeArrowLast
       , unicode: unicodeOption
       , width:
           Arg.argument [ "--width", "-w" ]
@@ -163,10 +174,10 @@ formatCommand args = do
 
   case parseModule contents of
     ParseSucceeded ok -> do
-      let opts = defaultFormatOptions { operators = remapOperators operators ok, unicode = args.unicode }
+      let opts = defaultFormatOptions { operators = remapOperators operators ok, typeArrowPlacement = args.typeArrowPlacement, unicode = args.unicode }
       Console.log $ print $ toDoc $ formatModule opts ok
     ParseSucceededWithErrors ok _ -> do
-      let opts = defaultFormatOptions { operators = remapOperators operators ok, unicode = args.unicode  }
+      let opts = defaultFormatOptions { operators = remapOperators operators ok, typeArrowPlacement = args.typeArrowPlacement, unicode = args.unicode  }
       Console.log $ print $ toDoc $ formatModule opts ok
     ParseFailed err ->
       Console.log $ printParseError err.error

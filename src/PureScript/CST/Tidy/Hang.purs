@@ -3,6 +3,7 @@ module PureScript.CST.Tidy.Hang
   , hang
   , hangBreak
   , hangApp
+  , hangOp
   , hangConcatApp
   , toFormatDoc
   ) where
@@ -18,6 +19,7 @@ import PureScript.CST.Tidy.Doc (ForceBreak(..), FormatDoc(..), flexGroup)
 
 data HangingDoc a
   = HangBreak (FormatDoc a)
+  | HangOp (FormatDoc a) (HangingDoc a)
   | HangApp (HangingDoc a) (NonEmptyArray (HangingDoc a))
 
 hang :: forall a. FormatDoc a -> HangingDoc a -> HangingDoc a
@@ -29,14 +31,18 @@ hangBreak = HangBreak <<< flexGroup
 hangApp :: forall a. HangingDoc a -> NonEmptyArray (HangingDoc a) -> HangingDoc a
 hangApp = HangApp
 
+hangOp :: forall a. FormatDoc a -> HangingDoc a -> HangingDoc a
+hangOp = HangOp <<< flexGroup
+
 hangConcatApp :: forall a. HangingDoc a -> NonEmptyArray (HangingDoc a) -> HangingDoc a
 hangConcatApp a b = case a of
   HangApp head tail -> HangApp head (tail <> b)
   _ -> HangApp a b
 
 data HangStk a
-  = HangRoot
-  | HangApps (HangStk a) (HangingDoc a) (Array (HangingDoc a))
+  = HangStkRoot
+  | HangStkApp (HangStk a) (HangingDoc a) (Array (HangingDoc a))
+  | HangStkOp (HangStk a) (FormatDoc a)
 
 data FormatDoc' a = FormatDoc' ForceBreak Int Boolean (Doc a) ForceBreak
 
@@ -45,7 +51,7 @@ data HangDoc a
   | HangEmpty
 
 toFormatDoc :: forall a. HangingDoc a -> FormatDoc a
-toFormatDoc = unHangDoc <<< followLast HangRoot
+toFormatDoc = unHangDoc <<< followLast HangStkRoot
   where
   unHangDoc :: HangDoc a -> FormatDoc a
   unHangDoc = case _ of
@@ -58,24 +64,28 @@ toFormatDoc = unHangDoc <<< followLast HangRoot
   followLast stk = case _ of
     HangBreak doc ->
       unwindStack (formatBreak doc) stk
+    HangOp doc docs ->
+      followLast (HangStkOp stk doc) docs
     HangApp doc docs ->
-      followLast (HangApps stk doc init) last
+      followLast (HangStkApp stk doc init) last
       where
       { init, last } =
         NonEmptyArray.unsnoc docs
 
   unwindStack :: HangDoc a -> HangStk a -> HangDoc a
   unwindStack accum = case _ of
-    HangApps stk head tail -> do
+    HangStkApp stk head tail -> do
       let
         args = foldr (formatArg <<< toFormatDoc) accum tail
         next = case head of
           HangBreak _ ->
             formatApp (toFormatDoc head) args
-          HangApp _ _ ->
+          _ ->
             formatMultilineApp (toFormatDoc head) args
       unwindStack next stk
-    HangRoot ->
+    HangStkOp stk op ->
+      unwindStack (formatOp op accum) stk
+    HangStkRoot ->
       accum
 
   formatMultilineApp :: FormatDoc a -> HangDoc a -> HangDoc a
@@ -125,6 +135,9 @@ toFormatDoc = unHangDoc <<< followLast HangRoot
             docGroup
             docBreak)
           fr2)
+
+  formatOp :: FormatDoc a -> HangDoc a -> HangDoc a
+  formatOp = formatApp -- Currently the same as an app, but that could change.
 
   formatBreak :: FormatDoc a -> HangDoc a
   formatBreak = case _ of

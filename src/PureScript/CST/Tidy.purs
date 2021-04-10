@@ -22,18 +22,23 @@ import Data.Array.NonEmpty as NonEmptyArray
 import Data.Foldable (foldMap, foldl, foldr)
 import Data.Map as Map
 import Data.Maybe (Maybe(..))
+import Data.Monoid (power)
+import Data.Monoid as Monoid
+import Data.String (Pattern(..))
+import Data.String as String
 import Data.String.CodeUnits as SCU
 import Data.Tuple (Tuple(..), fst)
+import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Tidy.Doc (FormatDoc, align, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, indent, joinWith, joinWithMap, leadingLineComment, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
+import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
 import PureScript.CST.Tidy.Doc (FormatDoc, toDoc) as Exports
-import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp)
+import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp, hangOp)
 import PureScript.CST.Tidy.Hang as Hang
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), PrecedenceMap, QualifiedOperator(..), toOperatorTree)
 import PureScript.CST.Tidy.Token (UnicodeOption(..)) as Exports
 import PureScript.CST.Tidy.Token (UnicodeOption(..), printToken)
-import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceToken, Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
+import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
 
 data TypeArrowOption
   = TypeArrowFirst
@@ -63,18 +68,56 @@ instance formatErrorVoid :: FormatError Void where
   formatError = absurd
 
 instance formatErrorRecoveredError :: FormatError RecoveredError where
-  formatError (RecoveredError { tokens }) = foldMap (formatToken errorConf) tokens
+  formatError (RecoveredError { tokens }) =
+    case Array.uncons tokens of
+      Just { head, tail } ->
+        case Array.unsnoc tail of
+          Just { init, last } ->
+            formatWithComments head.leadingComments last.trailingComments
+              $ fromDoc
+              $ Dodo.withPosition \{ nextIndent } -> do
+                let
+                  head' =
+                    Dodo.text (printToken UnicodeSource head.value)
+                      <> formatRecoveredComments nextIndent head.trailingComments
+                  init' = init # foldMap \tok ->
+                    formatRecoveredComments nextIndent tok.leadingComments
+                      <> Dodo.text (printToken UnicodeSource tok.value)
+                      <> formatRecoveredComments nextIndent tok.trailingComments
+                  last' =
+                    formatRecoveredComments nextIndent last.leadingComments
+                      <> Dodo.text (printToken UnicodeSource last.value)
+                head' <> init' <> last'
+
+          Nothing ->
+            formatToken { unicode: UnicodeSource } head
+      Nothing ->
+        mempty
     where
-    errorConf =
-      { unicode: UnicodeSource
-      }
+    formatRecoveredComments :: forall a b. Int -> Array (Comment a) -> Dodo.Doc b
+    formatRecoveredComments ind = _.doc <<< foldl (goComments ind) { line: false, doc: mempty }
+
+    goComments :: forall a b . Int -> { line :: Boolean, doc :: Dodo.Doc b } -> Comment a -> { line :: Boolean, doc :: Dodo.Doc b }
+    goComments ind acc = case _ of
+      Comment str
+        | SCU.take 2 str == "--" ->
+            { line: false, doc: acc.doc <> Dodo.text str }
+        | otherwise ->
+            { line: false, doc: acc.doc <> Dodo.lines (Dodo.text <$> String.split (Pattern "\r?\n") str) }
+      Line _ n ->
+        { line: true, doc: acc.doc <> power Dodo.break n }
+      Space n
+        | acc.line ->
+            { line: false, doc: acc.doc <> Dodo.text (power " " $ max 0 (n - ind)) }
+        | otherwise ->
+            { line: false, doc: acc.doc <> Dodo.text (power " " n) }
 
 type Format f e a = FormatOptions e a -> f -> FormatDoc a
 type FormatHanging f e a = FormatOptions e a -> f -> HangingDoc a
 type FormatSpace a = FormatDoc a -> FormatDoc a -> FormatDoc a
 
-formatComment :: forall l a c. (String -> FormatDoc a) -> c -> Comment l -> FormatDoc a -> FormatDoc a
-formatComment lineComment _ com next = case com of
+formatComment :: forall l a. (String -> FormatDoc a) -> Comment l -> FormatDoc a -> FormatDoc a
+formatComment lineComment com next = case com of
   Comment str
     | SCU.take 2 str == "--" ->
         lineComment str `break` next
@@ -85,13 +128,18 @@ formatComment lineComment _ com next = case com of
   Space n ->
     next
 
+formatWithComments :: forall a. Array (Comment LineFeed) -> Array (Comment Void) -> FormatDoc a -> FormatDoc a
+formatWithComments leading trailing doc =
+  foldr
+    (formatComment leadingLineComment)
+    (doc `space` foldr (formatComment trailingLineComment) mempty trailing)
+    leading
+
 formatToken :: forall a r. { unicode :: UnicodeOption | r } -> SourceToken -> FormatDoc a
-formatToken conf tok = do
-  let
-    token =
-      text (printToken conf.unicode tok.value)
-        `space` foldr (formatComment trailingLineComment conf) mempty tok.trailingComments
-  foldr (formatComment leadingLineComment conf) token tok.leadingComments
+formatToken conf tok =
+  formatWithComments tok.leadingComments tok.trailingComments
+    $ text
+    $ printToken conf.unicode tok.value
 
 formatName :: forall e a n. Format (Name n) e a
 formatName conf (Name { token }) = formatToken conf token
@@ -414,9 +462,15 @@ formatKindedTypeVarBinding conf (Labeled { label, separator, value }) =
 
 formatSignature :: forall e a. Format (Labeled (FormatDoc a) (Type e)) e a
 formatSignature conf (Labeled { label, separator, value }) =
-  label `space` indent do
-    flexGroup $ anchor (formatToken conf separator)
-      `spaceBreak` anchor (flexGroup (formatType conf value))
+  case conf.typeArrowPlacement of
+    TypeArrowFirst ->
+      label `flexSpaceBreak` indent do
+        anchor (formatToken conf separator)
+          `space` anchor (flexGroup (formatType conf value))
+    TypeArrowLast ->
+      label `space` indent do
+        flexGroup $ anchor (formatToken conf separator)
+          `spaceBreak` anchor (flexGroup (formatType conf value))
 
 formatMonotype :: forall e a. Format (Type e) e a
 formatMonotype conf = Hang.toFormatDoc <<< formatHangingMonotype conf
@@ -495,24 +549,51 @@ toPolytype = go []
 formatHangingPolytype :: forall e a. FormatHanging (Polytype e) e a
 formatHangingPolytype conf { init, last } = case conf.typeArrowPlacement of
   TypeArrowFirst ->
-    -- TODO
-    hangBreak $ mempty
-  TypeArrowLast ->
-    hangBreak $ joinWithMap spaceBreak (formatPolyArrowLast conf) init
-      `spaceBreak` flexGroup (formatMonotype conf last)
-
-formatPolyArrowLast :: forall e a. Format (Poly e) e a
-formatPolyArrowLast conf = case _ of
-  PolyForall kw vars dot ->
-    foldl go (formatToken conf kw) vars
-      <> indent (anchor (formatToken conf dot))
+    hangBreak $ foldl formatPolyArrowFirst identity init $ formatMonotype conf last
     where
-    go doc tyVar =
-      doc `flexSpaceBreak` indent (formatTypeVarBinding conf tyVar)
+    isUnicode = Array.any isUnicodeArrow init
+    isUnicodeArrow = case conf.unicode of
+      UnicodeAlways ->
+        const true
+      UnicodeNever ->
+        const false
+      UnicodeSource ->
+        case _ of
+          PolyArrow _ { value: TokRightArrow Unicode } -> true
+          PolyArrow _ { value: TokRightFatArrow Unicode } -> true
+          _ -> false
 
-  PolyArrow ty arr ->
-    flexGroup (formatType conf ty)
-      `space` indent (anchor (formatToken conf arr))
+    formatPolyArrowFirst k = case _ of
+      PolyForall kw vars dot ->
+        \doc ->
+          k (foldl go (formatToken conf kw) vars)
+            `softBreak`
+              (Monoid.guard (not isUnicode) (fromDoc (Dodo.flexAlt mempty Dodo.space))
+                <> anchor (formatToken conf dot))
+            `space` alignCurrentColumn doc
+        where
+        go doc tyVar =
+          doc `flexSpaceBreak` indent (formatTypeVarBinding conf tyVar)
+      PolyArrow ty arr ->
+        \doc ->
+          k (flexGroup (formatMonotype conf ty))
+            `spaceBreak` anchor (formatToken conf arr)
+            `space` alignCurrentColumn doc
+
+  TypeArrowLast ->
+    hangBreak $ joinWithMap spaceBreak formatPolyArrowLast init
+      `spaceBreak` flexGroup (formatMonotype conf last)
+    where
+    formatPolyArrowLast = case _ of
+      PolyForall kw vars dot ->
+        foldl go (formatToken conf kw) vars
+          <> indent (anchor (formatToken conf dot))
+        where
+        go doc tyVar =
+          doc `flexSpaceBreak` indent (formatTypeVarBinding conf tyVar)
+      PolyArrow ty arr ->
+        flexGroup (formatType conf ty)
+          `space` indent (anchor (formatToken conf arr))
 
 formatRow :: forall e a. FormatSpace a -> FormatSpace a -> Format (Wrapped (Row e)) e a
 formatRow openSpace closeSpace conf (Wrapped { open, value: Row { labels, tail }, close }) = case labels, tail of
@@ -611,10 +692,11 @@ formatHangingExpr conf = case _ of
 
   ExprLambda lmb ->
     hang
-      ((formatToken conf lmb.symbol <> binders) `space` indent (anchor (formatToken conf lmb.arrow)))
+      ((formatToken conf lmb.symbol <> alignCurrentColumn binders)
+        `space` indent (anchor (formatToken conf lmb.arrow)))
       (formatHangingExpr conf lmb.body)
     where
-    binders = align 1 $ flexGroup do
+    binders = flexGroup do
       joinWithMap spaceBreak (anchor <<< formatBinder conf) lmb.binders
 
   ExprIf ifte ->
@@ -865,7 +947,7 @@ formatHangingOperatorTree formatOperator format conf = go
     OpPure a -> format conf a
     OpList head _ tail ->
       hangConcatApp (go head)
-        (map (\(Tuple op b) -> hang (formatOperator conf op) (go b)) tail)
+        (map (\(Tuple op b) -> formatOperator conf op `hangOp` go b) tail)
 
 formatParens :: forall e a b. Format b e a -> Format (Wrapped b) e a
 formatParens format conf (Wrapped { open, value, close }) =
