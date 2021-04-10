@@ -25,7 +25,7 @@ main = do
   let opts = ChildProcess.defaultExecSyncOptions { cwd = Just tmpPath }
   let genCmd = "node -e \"require('" <> cwdPath <> "/output/Main/index.js').main()\" generate-operators '.spago/*/*/src/**/*.purs'"
 
-  writeTextFile UTF8 (Path.concat [ tmpPath,  "spago.dhall" ]) defaultSpagoDhall
+  writeTextFile UTF8 (Path.concat [ tmpPath, "spago.dhall" ]) defaultSpagoDhall
   _ <- ChildProcess.execSync "spago install" opts
   output <- Buffer.toString UTF8 =<< ChildProcess.execSync genCmd opts
 

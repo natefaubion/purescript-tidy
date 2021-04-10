@@ -159,6 +159,7 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
 
     , joinWithMap break (formatImportDecl conf) header.imports
     , joinWithMap break (formatDecl conf) body.decls
+    , foldr (formatComment leadingLineComment) mempty body.trailingComments
     ]
 
 formatExport :: forall e a. Format (Export e) e a
