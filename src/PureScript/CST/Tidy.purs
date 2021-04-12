@@ -33,7 +33,7 @@ import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
 import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
 import PureScript.CST.Tidy.Doc (FormatDoc, toDoc) as Exports
-import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp, hangOp)
+import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp, hangOp, hangWithIndent)
 import PureScript.CST.Tidy.Hang as Hang
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), PrecedenceMap, QualifiedOperator(..), toOperatorTree)
 import PureScript.CST.Tidy.Token (UnicodeOption(..)) as Exports
@@ -156,7 +156,6 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
             anchor (foldMap (formatParenListNonEmpty formatExport conf) header.exports)
           `space`
             anchor (formatToken conf header."where")
-
     , joinWithMap break (formatImportDecl conf) header.imports
     , joinWithMap break (formatDecl conf) body.decls
     , foldr (formatComment leadingLineComment) mempty body.trailingComments
@@ -171,13 +170,13 @@ formatExport conf = case _ of
   ExportType n members ->
     flexGroup $ formatName conf n `softBreak` indent (foldMap (formatDataMembers conf) members)
   ExportTypeOp t n ->
-    formatToken conf t `space` formatName conf n
+    formatToken conf t `space` anchor (formatName conf n)
   ExportClass t n ->
-    formatToken conf t `space` formatName conf n
+    formatToken conf t `space` anchor (formatName conf n)
   ExportKind t n ->
-    formatToken conf t `space` formatName conf n
+    formatToken conf t `space` anchor (formatName conf n)
   ExportModule t n ->
-    formatToken conf t `space` formatName conf n
+    formatToken conf t `space` anchor (formatName conf n)
   ExportError e ->
     conf.formatError e
 
@@ -190,24 +189,24 @@ formatDataMembers conf = case _ of
 
 formatImportDecl :: forall e a. Format (ImportDecl e) e a
 formatImportDecl conf (ImportDecl imp) =
-  formatToken conf imp.keyword `space` indent importDeclBody
+  formatToken conf imp.keyword `space` indent (anchor importDeclBody)
   where
   importDeclBody = case imp.names of
     Just (Tuple (Just hiding) nameList) ->
       formatName conf imp."module"
         `space` anchor (formatToken conf hiding)
         `flexSpaceBreak` anchor (formatParenListNonEmpty formatImport conf nameList)
-        `space` foldMap formatImportQualified imp.qualified
+        `space` anchor (foldMap formatImportQualified imp.qualified)
     Just (Tuple Nothing nameList) ->
       formatName conf imp."module"
         `flexSpaceBreak` anchor (formatParenListNonEmpty formatImport conf nameList)
-        `space` foldMap formatImportQualified imp.qualified
+        `space` anchor (foldMap formatImportQualified imp.qualified)
     Nothing ->
       formatName conf imp."module"
-        `space` foldMap formatImportQualified imp.qualified
+        `space` anchor (foldMap formatImportQualified imp.qualified)
 
   formatImportQualified (Tuple as qualName) =
-    anchor (formatToken conf as) `space` anchor (formatName conf qualName)
+    formatToken conf as `space` anchor (formatName conf qualName)
 
 formatImport :: forall e a. Format (Import e) e a
 formatImport conf = case _ of
@@ -218,11 +217,11 @@ formatImport conf = case _ of
   ImportType n members ->
     flexGroup $ formatName conf n `softBreak` indent (foldMap (formatDataMembers conf) members)
   ImportTypeOp t n ->
-    formatToken conf t `space` formatName conf n
+    formatToken conf t `space` anchor (formatName conf n)
   ImportClass t n ->
-    formatToken conf t `space` formatName conf n
+    formatToken conf t `space` anchor (formatName conf n)
   ImportKind t n ->
-    formatToken conf t `space` formatName conf n
+    formatToken conf t `space` anchor (formatName conf n)
   ImportError e ->
     conf.formatError e
 
@@ -376,17 +375,17 @@ formatDataCtor conf (DataCtor { name, fields }) =
 formatClassHead :: forall e a. Format (Tuple (ClassHead e) (Maybe SourceToken)) e a
 formatClassHead conf (Tuple cls wh) =
   formatToken conf cls.keyword `flexSpaceBreak` indent do
-    foldMap (formatConstraints conf) cls.super
+    anchor (foldMap (formatConstraints conf) cls.super)
       `spaceBreak`
         flexGroup do
-          formatName conf cls.name
+          anchor (formatName conf cls.name)
             `spaceBreak`
               joinWithMap spaceBreak (indent <<< formatTypeVarBinding conf) cls.vars
       `spaceBreak`
         flexGroup do
-          foldMap formatFundeps cls.fundeps
+          anchor (foldMap formatFundeps cls.fundeps)
       `spaceBreak`
-        foldMap (formatToken conf) wh
+        anchor (foldMap (formatToken conf) wh)
   where
   formatFundeps (Tuple tok (Separated { head, tail })) =
     formatToken conf tok
@@ -402,7 +401,7 @@ formatClassHead conf (Tuple cls wh) =
 formatConstraints :: forall e a. Format (Tuple (OneOrDelimited (Type e)) SourceToken) e a
 formatConstraints conf (Tuple cs arr) =
   formatOneOrDelimited formatType conf cs
-    `space` formatToken conf arr
+    `space` anchor (formatToken conf arr)
 
 formatFundep :: forall e a. Format ClassFundep e a
 formatFundep conf = case _ of
@@ -493,7 +492,7 @@ formatHangingMonotype conf = case _ of
   TypeOpName n ->
     hangBreak $ formatQualifiedName conf n
   TypeRow row ->
-    hangBreak $ formatRow softSpace spaceBreak conf row
+    hangBreak $ formatRow softSpace softBreak conf row
   TypeRecord row ->
     hangBreak $ formatRow space spaceBreak conf row
   TypeApp head tail ->
@@ -552,7 +551,7 @@ formatHangingPolytype conf { init, last } = case conf.typeArrowPlacement of
   TypeArrowFirst ->
     hangBreak $ foldl formatPolyArrowFirst identity init $ formatMonotype conf last
     where
-    isUnicode = Array.any isUnicodeArrow init
+    isUnicode = Array.all isUnicodeArrow init
     isUnicodeArrow = case conf.unicode of
       UnicodeAlways ->
         const true
@@ -797,27 +796,34 @@ formatCaseBranch conf (Tuple (Separated { head, tail }) guarded) =
           indent (foldMap (formatWhere conf) bindings)
 
     Guarded guards ->
-      flexGroup caseBinders `flexSpaceBreak` indent do
-        joinWithMap break (formatGuardedExpr conf) guards
-
+      if NonEmptyArray.length guards == 1 then
+        Hang.toFormatDoc $ caseBinders `hang` formatGuardedExpr conf (NonEmptyArray.head guards)
+      else
+        caseBinders `flexSpaceBreak` indent do
+          joinWithMap break (Hang.toFormatDoc <<< formatGuardedExpr conf) guards
   where
   caseBinders =
-    foldl
+    flexGroup $ foldl
       (\doc (Tuple a b) ->
         (doc <> indent (anchor (formatToken conf a)))
           `spaceBreak` flexGroup (formatBinder conf b))
       (flexGroup (formatBinder conf head))
       tail
 
-formatGuardedExpr :: forall e a. Format (GuardedExpr e) e a
+formatGuardedExpr :: forall e a. FormatHanging (GuardedExpr e) e a
 formatGuardedExpr conf (GuardedExpr ge@{ patterns: Separated { head, tail }, where: Where { expr, bindings } }) =
-  formatToken conf ge.bar
-    `space`
-      flexGroup patternGuards
-    `space`
-      align 2 do
-        Hang.toFormatDoc (anchor (formatToken conf ge.separator) `hang` formatHangingExpr conf expr)
-          `break` indent (foldMap (formatWhere conf) bindings)
+  hangWithIndent (Dodo.align 2 <<< Dodo.indent)
+    (hangBreak
+      (formatToken conf ge.bar
+        `space` flexGroup patternGuards
+        `space` anchor (formatToken conf ge.separator)))
+    case bindings of
+      Nothing ->
+        [ formatHangingExpr conf expr ]
+      Just wh ->
+        [ formatHangingExpr conf expr
+        , hangBreak $ formatWhere conf wh
+        ]
   where
   patternGuards =
     formatListElem 2 formatPatternGuard conf head
@@ -867,9 +873,15 @@ formatValueBinding conf { name, binders, guarded } =
           indent (foldMap (formatWhere conf) bindings)
 
     Guarded guards ->
-      formatName conf name
-        `flexSpaceBreak` indent (joinWithMap spaceBreak (anchor <<< formatBinder conf) binders)
-        `flexSpaceBreak` indent (joinWithMap break (formatGuardedExpr conf) guards)
+      if NonEmptyArray.length guards == 1 then
+        Hang.toFormatDoc $ valBinders `hang` formatGuardedExpr conf (NonEmptyArray.head guards)
+      else
+        valBinders `flexSpaceBreak` indent do
+          joinWithMap break (Hang.toFormatDoc <<< formatGuardedExpr conf) guards
+      where
+      valBinders =
+        formatName conf name `flexSpaceBreak` indent do
+          joinWithMap spaceBreak (anchor <<< flexGroup <<< formatBinder conf) binders
 
 formatDoStatement :: forall e a. Format (DoStatement e) e a
 formatDoStatement conf = case _ of
@@ -880,10 +892,9 @@ formatDoStatement conf = case _ of
   DoDiscard expr ->
     formatExpr conf expr
   DoBind binder tok expr ->
-    declare
-      (formatBinder conf binder)
-      (anchor (formatToken conf tok))
-      (formatExpr conf expr)
+    flexGroup (formatBinder conf binder)
+      `space` Hang.toFormatDoc do
+        anchor (formatToken conf tok) `hang` formatHangingExpr conf expr
   DoError e ->
     conf.formatError e
 
