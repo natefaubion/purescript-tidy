@@ -15,7 +15,7 @@ spago -x ./bin/spago.dhall build
 
 To accept snapshot tests:
 ```sh
-spago test -a "--accept"
+spago -x ./test/spago.dhall test -a "--accept"
 ```
 
 ### Generating the built-in operator table
