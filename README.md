@@ -21,5 +21,5 @@ spago test -a "--accept"
 ### Generating the built-in operator table
 
 ```sh
-spago -x ./script/spago.dhall -m GenerateDefaultOperatorsModule
+spago -x ./script/spago.dhall run -m GenerateDefaultOperatorsModule
 ```
