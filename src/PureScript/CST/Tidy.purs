@@ -720,10 +720,10 @@ formatHangingExpr conf = case _ of
 
   ExprLet letIn ->
     hangBreak $ formatToken conf letIn.keyword
-      `flexSpaceBreak`
+      `spaceBreak`
         indent (joinWithMap break (formatLetBinding conf) letIn.bindings)
-      `flexSpaceBreak`
-        (formatToken conf letIn.in `spaceBreak` indent (formatExpr conf letIn.body))
+      `spaceBreak`
+        (formatToken conf letIn.in `spaceBreak` indent (flexGroup (formatExpr conf letIn.body)))
 
   ExprDo doBlock ->
     hang
