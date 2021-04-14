@@ -549,7 +549,7 @@ toPolytype = go []
 formatHangingPolytype :: forall e a. FormatHanging (Polytype e) e a
 formatHangingPolytype conf { init, last } = case conf.typeArrowPlacement of
   TypeArrowFirst ->
-    hangBreak $ foldl formatPolyArrowFirst identity init $ formatMonotype conf last
+    hangBreak $ foldl formatPolyArrowFirst identity init $ anchor $ formatMonotype conf last
     where
     isUnicode = Array.all isUnicodeArrow init
     isUnicodeArrow = case conf.unicode of
@@ -570,7 +570,7 @@ formatHangingPolytype conf { init, last } = case conf.typeArrowPlacement of
             `softBreak`
               (Monoid.guard (not isUnicode) (fromDoc (Dodo.flexAlt mempty Dodo.space))
                 <> anchor (formatToken conf dot))
-            `space` alignCurrentColumn doc
+            `space` anchor (alignCurrentColumn doc)
         where
         go doc tyVar =
           doc `flexSpaceBreak` indent (formatTypeVarBinding conf tyVar)
@@ -578,7 +578,7 @@ formatHangingPolytype conf { init, last } = case conf.typeArrowPlacement of
         \doc ->
           k (flexGroup (formatMonotype conf ty))
             `spaceBreak` anchor (formatToken conf arr)
-            `space` alignCurrentColumn doc
+            `space` anchor (alignCurrentColumn doc)
 
   TypeArrowLast ->
     hangBreak $ joinWithMap spaceBreak formatPolyArrowLast init
