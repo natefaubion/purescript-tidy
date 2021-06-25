@@ -28,13 +28,13 @@ jobs:
         run: spago build
 
       - name: Build script
-        run: spago -x script/spago.dhall build
+        run: spago --config script/spago.dhall build
 
       - name: Build bin
-        run: spago -x bin/spago.dhall build
+        run: spago --config bin/spago.dhall build
 
       - name: Build tests
-        run: spago -x test/spago.dhall build
+        run: spago --config test/spago.dhall build
 
       - name: Run tests
-        run: spago -x test/spago.dhall test
+        run: spago --quiet --config test/spago.dhall test
