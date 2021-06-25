@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: purescript-contrib/setup-purescript@main
+      - uses: actions/cache@v2
+        # This cache uses the .dhall files to know when it should reinstall
+        # and rebuild packages. It caches both the installed packages from
+        # the `.spago` directory and compilation artifacts from the `output`
+        # directory. When restored the compiler will rebuild any files that
+        # have changed.
+        with:
+          key: ${{ runner.os }}-spago-${{ hashFiles('**/*.dhall') }}
+          path: |
+            .spago
+            output
+
+      - name: Build source
+        run: spago build
+
+      - name: Build script
+        run: spago --config script/spago.dhall build
+
+      - name: Build bin
+        run: spago --config bin/spago.dhall build
+
+      - name: Build tests
+        run: spago --config test/spago.dhall build
+
+      - name: Run tests
+        run: spago --quiet --config test/spago.dhall test
