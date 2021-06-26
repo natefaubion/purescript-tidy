@@ -125,7 +125,7 @@ formatComment lineComment com next = case com of
         blockComment str `space` next
   Line _ n ->
     sourceBreak n next
-  Space n ->
+  Space _ ->
     next
 
 formatWithComments :: forall a. Array (Comment LineFeed) -> Array (Comment Void) -> FormatDoc a -> FormatDoc a

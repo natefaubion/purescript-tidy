@@ -99,7 +99,7 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
       b
     a, HangEmpty ->
       formatBreak a
-    FormatDoc fl1 n1 m1 doc1 fr1, HangGroup _ docBreak (FormatDoc' _ _ _ _ fr2) ->
+    FormatDoc fl1 n1 m1 doc1 _, HangGroup _ docBreak (FormatDoc' _ _ _ _ fr2) ->
       HangGroup
         (forceBreaks n1 <> doc1 <> docBreak)
         (forceBreaks n1 <> doc1 <> docBreak)
@@ -111,7 +111,7 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
       b
     a, HangEmpty ->
       formatBreak a
-    FormatDoc fl1 n1 m1 doc1 fr1, HangGroup docGroup _ (FormatDoc' _ _ _ _ fr2) -> do
+    FormatDoc fl1 n1 m1 doc1 _, HangGroup docGroup _ (FormatDoc' _ _ _ _ fr2) -> do
       let docIndent = ind docGroup
       HangGroup
         (Dodo.flexSelect
@@ -127,7 +127,7 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
       b
     a, HangEmpty ->
       formatBreak a
-    FormatDoc fl1 n1 m1 doc1 fr1, HangGroup docGroup docBreak (FormatDoc' _ _ _ _ fr2) ->
+    FormatDoc fl1 n1 m1 doc1 _, HangGroup docGroup docBreak (FormatDoc' _ _ _ _ fr2) ->
       HangGroup
         (Dodo.flexSelect
           (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))

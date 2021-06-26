@@ -92,7 +92,7 @@ snapshotFormat directory accept mbPattern = do
     let acceptOutput = writeFile outputPath =<< liftEffect (Buffer.fromString output UTF8)
     savedOutputFile <- try $ readFile outputPath
     case savedOutputFile of
-      Left err -> do
+      Left _ -> do
         acceptOutput
         pure { name, output, result: Saved }
       Right buffer -> do
