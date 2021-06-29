@@ -4,12 +4,20 @@ import Prelude
 
 import Control.MonadZero (guard)
 import Data.Array (mapMaybe)
+import Data.Array as Array
 import Data.Either (Either(..))
-import Data.Maybe (Maybe(..))
+import Data.Foldable (fold)
+import Data.Maybe (Maybe(..), isNothing)
+import Data.Newtype (unwrap)
 import Data.Posix.Signal (Signal(..))
 import Data.String (Pattern(..), stripSuffix)
 import Data.String as String
+import Data.String.Regex (Regex)
+import Data.String.Regex as Regex
+import Data.String.Regex.Flags (noFlags)
+import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for)
+import Data.Tuple (uncurry)
 import Dodo (PrintOptions, twoSpaces)
 import Dodo as Dodo
 import Effect (Effect)
@@ -27,9 +35,9 @@ import Node.Path as Path
 import Node.Stream as Stream
 import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (printParseError)
-import PureScript.CST.Tidy (class FormatError, FormatOptions, defaultFormatOptions)
+import PureScript.CST.Tidy (class FormatError, TypeArrowOption(..), FormatOptions, defaultFormatOptions)
 import PureScript.CST.Tidy as Tidy
-import PureScript.CST.Types (Module)
+import PureScript.CST.Types (Comment(..), Module(..), ModuleHeader(..), SourceToken)
 
 data SnapshotResult
   = Passed
@@ -40,8 +48,7 @@ data SnapshotResult
 
 type SnapshotTest =
   { name :: String
-  , output :: String
-  , result :: SnapshotResult
+  , results :: Array { output :: String, result :: SnapshotResult }
   }
 
 isBad :: SnapshotResult -> Boolean
@@ -85,11 +92,18 @@ snapshotFormat directory accept mbPattern = do
         pure { name, output: "", result: Failed formattedError }
 
   runSnapshotForModule :: forall e. FormatError e => String -> FilePath -> Module e -> Aff SnapshotTest
-  runSnapshotForModule name outputPath mod = do
+  runSnapshotForModule name outputPath mod' = do
     let printOptions = twoSpaces { pageWidth = top :: Int }
     let formatOptions = defaultFormatOptions
-    let output = formatModule printOptions formatOptions mod
-    let acceptOutput = writeFile outputPath =<< liftEffect (Buffer.fromString output UTF8)
+    let { mod, options } = parseOptionsFromModule mod'
+    let
+      outputs =
+        options # Array.mapWithIndex \ix { original, option } -> fold do
+          [ original <> "\n" # guard (ix /= 0)
+          , formatModule printOptions (formatOptions { typeArrowPlacement = option }) mod
+          ]
+
+    let acceptOutput = writeFile outputPath =<< liftEffect (Buffer.fromString (Array.intercalate "\n" outputs) UTF8)
     savedOutputFile <- try $ readFile outputPath
     case savedOutputFile of
       Left _ -> do
@@ -97,7 +111,15 @@ snapshotFormat directory accept mbPattern = do
         pure { name, output, result: Saved }
       Right buffer -> do
         savedOutput <- liftEffect $ bufferToUTF8 buffer
-        if output == savedOutput then
+        let
+          matchedOutputs =
+            savedOutput
+              # Regex.split optionRegex
+              # Array.zip outputs
+
+        -- TODO: Test outputs in format-matching pairs, producing multiple SnapshotResults
+
+        if Array.all (uncurry eq) matchedOutput then
           pure { name, output, result: Passed }
         else if accept then do
           acceptOutput
@@ -119,3 +141,52 @@ execWithStdin command input = makeAff \k -> do
 
 bufferToUTF8 :: Buffer -> Effect String
 bufferToUTF8 = map (ImmutableBuffer.toString UTF8) <<< freeze
+
+parseOptionsFromModule
+  :: forall e
+   . Module e
+  -> { mod :: Module e, options :: Array { original :: String, option :: TypeArrowOption } }
+parseOptionsFromModule (Module { header: ModuleHeader header, body }) =
+  { mod
+  , options
+  }
+  where
+  headerComments = header.keyword.leadingComments
+
+  defaultOptions :: forall a. FormatOptions Void a
+  defaultOptions = defaultFormatOptions
+
+  options =
+    Array.cons defaultOptions.typeArrowPlacement
+      $ Array.mapMaybe parseOptionFromComment headerComments
+
+  keyword =
+    { range: header.keyword.range
+    , trailingComments: header.keyword.trailingComments
+    , value: header.keyword.value
+    , leadingComments: Array.filter (isNothing <<< parseOptionFromComment) headerComments
+    }
+
+  strippedHeader = ModuleHeader
+    { keyword
+    , name: header.name
+    , exports: header.exports
+    , where: header.where
+    , imports: header.imports
+    }
+
+  mod = Module
+    { header: strippedHeader
+    , body
+    }
+
+  parseOptionFromComment :: forall l. Comment l -> Maybe TypeArrowOption
+  parseOptionFromComment = case _ of
+    Space _ -> Nothing
+    Line _ _ -> Nothing
+    Comment " @format arrow-first" -> Just TypeArrowFirst
+    Comment " @format arrow-last" -> Just TypeArrowLast
+    Comment _ -> Nothing
+
+optionRegex :: Regex
+optionRegex = unsafeRegex " @format (arrow-first|arrow-last)" noFlags
