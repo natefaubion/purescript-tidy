@@ -5,15 +5,16 @@ import Prelude
 import Control.MonadZero (guard)
 import Data.Array (mapMaybe)
 import Data.Array as Array
+import Data.Array.NonEmpty as NEA
 import Data.Either (Either(..))
-import Data.Foldable (fold)
+import Data.Foldable (fold, foldMap)
 import Data.Maybe (Maybe(..), isNothing)
 import Data.Posix.Signal (Signal(..))
 import Data.String (Pattern(..), stripSuffix)
 import Data.String as String
 import Data.String.Regex (Regex)
 import Data.String.Regex as Regex
-import Data.String.Regex.Flags (noFlags)
+import Data.String.Regex.Flags (global)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
@@ -22,6 +23,7 @@ import Dodo as Dodo
 import Effect (Effect)
 import Effect.Aff (Aff, Error, catchError, effectCanceler, makeAff, try)
 import Effect.Class (liftEffect)
+import Effect.Exception (error)
 import Node.Buffer (Buffer, freeze)
 import Node.Buffer as Buffer
 import Node.Buffer.Immutable as ImmutableBuffer
@@ -115,6 +117,16 @@ snapshotFormat directory accept mbPattern = do
         let
           -- TODO: What if we haven't accepted an output with the same number of format permutations?
           -- TODO: Should report "No format for...."
+
+          savedOutputOptions :: Array TypeArrowOption
+          savedOutputOptions =
+            savedOutput
+              # Regex.match optionRegex
+              # foldMap (NEA.toUnfoldable >>> Array.catMaybes)
+              # Array.mapMaybe (String.trim >>> parseOption)
+              # map _.option
+              # Array.cons TypeArrowLast
+
           matchedOutputs =
             savedOutput
               # Regex.split optionRegex
@@ -132,12 +144,19 @@ snapshotFormat directory accept mbPattern = do
               diffOutput <- liftEffect $ bufferToUTF8 diffBuff
               pure { output, result: Failed diffOutput }
 
-        (results :: Array { output :: String, result :: SnapshotResult }) <- for matchedOutputs checkOutput
+          acceptedOutput :: String -> Aff { output :: String, result :: SnapshotResult }
+          acceptedOutput output =
+            pure { output, result: Accepted }
 
-        pure
-          { name
-          , results
-          }
+        if savedOutputOptions == map _.option options then do
+          results <- for matchedOutputs checkOutput
+          pure { name, results }
+        else if accept then do
+          acceptOutput
+          results <- for outputsMemory acceptedOutput
+          pure { name, results }
+        else
+          makeErrorResult name (error "Mismatched format options in output file.")
 
   formatModule :: forall e a. PrintOptions -> FormatOptions e a -> Module e -> String
   formatModule opts conf = Dodo.print Dodo.plainText opts <<< Tidy.toDoc <<< Tidy.formatModule conf
@@ -196,5 +215,11 @@ parseOptionsFromModule (Module { header: ModuleHeader header, body }) =
     Comment original@"-- @format arrow-last" -> Just { original, option: TypeArrowLast }
     Comment _ -> Nothing
 
+parseOption :: String -> Maybe { original :: String, option :: TypeArrowOption }
+parseOption = case _ of
+  original@"-- @format arrow-first" -> Just { original, option: TypeArrowFirst }
+  original@"-- @format arrow-last" -> Just { original, option: TypeArrowLast }
+  _ -> Nothing
+
 optionRegex :: Regex
-optionRegex = unsafeRegex "\\n-- @format .+\\n" noFlags
+optionRegex = unsafeRegex "\\n-- @format .+\\n" global
