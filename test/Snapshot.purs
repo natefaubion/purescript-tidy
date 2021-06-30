@@ -8,7 +8,6 @@ import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Foldable (fold)
 import Data.Maybe (Maybe(..), isNothing)
-import Data.Newtype (unwrap)
 import Data.Posix.Signal (Signal(..))
 import Data.String (Pattern(..), stripSuffix)
 import Data.String as String
@@ -17,7 +16,7 @@ import Data.String.Regex as Regex
 import Data.String.Regex.Flags (noFlags)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for)
-import Data.Tuple (uncurry)
+import Data.Tuple (Tuple(..))
 import Dodo (PrintOptions, twoSpaces)
 import Dodo as Dodo
 import Effect (Effect)
@@ -32,12 +31,11 @@ import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readFile, readdir, writeFile)
 import Node.Path (FilePath, basename)
 import Node.Path as Path
-import Node.Stream as Stream
 import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (printParseError)
 import PureScript.CST.Tidy (class FormatError, TypeArrowOption(..), FormatOptions, defaultFormatOptions)
 import PureScript.CST.Tidy as Tidy
-import PureScript.CST.Types (Comment(..), Module(..), ModuleHeader(..), SourceToken)
+import PureScript.CST.Types (Comment(..), Module(..), ModuleHeader(..))
 
 data SnapshotResult
   = Passed
@@ -69,7 +67,7 @@ snapshotFormat directory accept mbPattern = do
       pure
 
   makeErrorResult :: String -> Error -> Aff SnapshotTest
-  makeErrorResult name err = pure { name, output: "", result: ErrorRunningTest err }
+  makeErrorResult name err = pure { name, results: [ { output: "", result: ErrorRunningTest err } ] }
 
   runSnapshot :: String -> Aff SnapshotTest
   runSnapshot name = flip catchError (makeErrorResult name) do
@@ -89,7 +87,7 @@ snapshotFormat directory accept mbPattern = do
               <> show (err.position.line + 1)
               <> ":"
               <> show (err.position.column + 1)
-        pure { name, output: "", result: Failed formattedError }
+        pure { name, results: [ { output: "", result: Failed formattedError } ] }
 
   runSnapshotForModule :: forall e. FormatError e => String -> FilePath -> Module e -> Aff SnapshotTest
   runSnapshotForModule name outputPath mod' = do
@@ -97,46 +95,56 @@ snapshotFormat directory accept mbPattern = do
     let formatOptions = defaultFormatOptions
     let { mod, options } = parseOptionsFromModule mod'
     let
-      outputs =
+      outputsFile =
         options # Array.mapWithIndex \ix { original, option } -> fold do
-          [ original <> "\n" # guard (ix /= 0)
+          [ if ix /= 0 then original <> "\n" else ""
           , formatModule printOptions (formatOptions { typeArrowPlacement = option }) mod
           ]
 
-    let acceptOutput = writeFile outputPath =<< liftEffect (Buffer.fromString (Array.intercalate "\n" outputs) UTF8)
+      outputsMemory = options <#> \{ option } ->
+        formatModule printOptions (formatOptions { typeArrowPlacement = option }) mod
+
+    let acceptOutput = writeFile outputPath =<< liftEffect (Buffer.fromString (Array.intercalate "\n" outputsFile) UTF8)
     savedOutputFile <- try $ readFile outputPath
     case savedOutputFile of
       Left _ -> do
         acceptOutput
-        pure { name, output, result: Saved }
+        pure { name, results: map (\output -> { result: Saved, output }) outputsMemory }
       Right buffer -> do
         savedOutput <- liftEffect $ bufferToUTF8 buffer
         let
+          -- TODO: What if we haven't accepted an output with the same number of format permutations?
+          -- TODO: Should report "No format for...."
           matchedOutputs =
             savedOutput
               # Regex.split optionRegex
-              # Array.zip outputs
+              # Array.zip outputsMemory
 
-        -- TODO: Test outputs in format-matching pairs, producing multiple SnapshotResults
+          checkOutput :: Tuple String String -> Aff { output :: String, result :: SnapshotResult }
+          checkOutput (Tuple output saved) =
+            if output == saved then
+              pure { output, result: Passed }
+            else if accept then do
+              acceptOutput
+              pure { output, result: Accepted }
+            else do
+              { stdout: diffBuff } <- exec ("diff <(echo \"" <> output <> "\") <(echo \"" <> saved <> "\")")
+              diffOutput <- liftEffect $ bufferToUTF8 diffBuff
+              pure { output, result: Failed diffOutput }
 
-        if Array.all (uncurry eq) matchedOutput then
-          pure { name, output, result: Passed }
-        else if accept then do
-          acceptOutput
-          pure { name, output, result: Accepted }
-        else do
-          { stdout: diffBuff } <- execWithStdin ("diff " <> outputPath <> " -") output
-          diffOutput <- liftEffect $ bufferToUTF8 diffBuff
-          pure { name, output, result: Failed diffOutput }
+        (results :: Array { output :: String, result :: SnapshotResult }) <- for matchedOutputs checkOutput
+
+        pure
+          { name
+          , results
+          }
 
   formatModule :: forall e a. PrintOptions -> FormatOptions e a -> Module e -> String
   formatModule opts conf = Dodo.print Dodo.plainText opts <<< Tidy.toDoc <<< Tidy.formatModule conf
 
-execWithStdin :: String -> String -> Aff ExecResult
-execWithStdin command input = makeAff \k -> do
+exec :: String -> Aff ExecResult
+exec command = makeAff \k -> do
   childProc <- ChildProcess.exec command defaultExecOptions (k <<< pure)
-  _ <- Stream.writeString (ChildProcess.stdin childProc) UTF8 input mempty
-  Stream.end (ChildProcess.stdin childProc) mempty
   pure $ effectCanceler $ ChildProcess.kill SIGABRT childProc
 
 bufferToUTF8 :: Buffer -> Effect String
@@ -157,7 +165,7 @@ parseOptionsFromModule (Module { header: ModuleHeader header, body }) =
   defaultOptions = defaultFormatOptions
 
   options =
-    Array.cons defaultOptions.typeArrowPlacement
+    Array.cons { original: "", option: defaultOptions.typeArrowPlacement }
       $ Array.mapMaybe parseOptionFromComment headerComments
 
   keyword =
@@ -180,13 +188,13 @@ parseOptionsFromModule (Module { header: ModuleHeader header, body }) =
     , body
     }
 
-  parseOptionFromComment :: forall l. Comment l -> Maybe TypeArrowOption
+  parseOptionFromComment :: forall l. Comment l -> Maybe { original :: String, option :: TypeArrowOption }
   parseOptionFromComment = case _ of
     Space _ -> Nothing
     Line _ _ -> Nothing
-    Comment " @format arrow-first" -> Just TypeArrowFirst
-    Comment " @format arrow-last" -> Just TypeArrowLast
+    Comment original@"-- @format arrow-first" -> Just { original, option: TypeArrowFirst }
+    Comment original@"-- @format arrow-last" -> Just { original, option: TypeArrowLast }
     Comment _ -> Nothing
 
 optionRegex :: Regex
-optionRegex = unsafeRegex " @format (arrow-first|arrow-last)" noFlags
+optionRegex = unsafeRegex "\\n-- @format .+\\n" noFlags

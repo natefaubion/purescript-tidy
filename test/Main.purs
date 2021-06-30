@@ -23,7 +23,8 @@ main = do
   let filter = Pattern <$> findMap (String.stripPrefix (Pattern "--filter=")) args
   launchAff_ do
     results <- snapshotFormat "./test/snapshots" accept filter
-    for_ results \{ name, output, result } -> case result of
+    -- TODO: Group results by snapshot test, group under name, indent with format directive
+    for_ results \{ name, results: outputResults } -> for_ outputResults \{ output, result } -> case result of
       Passed -> do
         Console.log $ withGraphics (foreground Green) "✓" <> " " <> name <> " passed."
         when printOutput $ Console.log output
@@ -40,5 +41,5 @@ main = do
       ErrorRunningTest err -> do
         Console.log $ withGraphics (foreground Red) "✗" <> " " <> name <> " failed due to an error."
         Console.log $ Error.message err
-    when (any (isBad <<< _.result) results) do
+    when (any (any (isBad <<< _.result) <<< _.results) results) do
       liftEffect $ Process.exit 1
