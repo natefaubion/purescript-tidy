@@ -2,7 +2,9 @@
 , dependencies =
   [ "aff"
   , "ansi"
+  , "argparse-basic"
   , "arrays"
+  , "bifunctors"
   , "console"
   , "control"
   , "dodo-printer"
@@ -10,10 +12,8 @@
   , "either"
   , "exceptions"
   , "foldable-traversable"
-  , "integers"
   , "lists"
   , "maybe"
-  , "numbers"
   , "debug"
   , "node-buffer"
   , "node-child-process"
@@ -26,9 +26,8 @@
   , "prelude"
   , "purescript-language-cst-parser"
   , "strings"
-  , "string-parsers"
   , "tuples"
   ]
 , packages = ../packages.dhall
-, sources = [ "src/**/*.purs", "test/*.purs" ]
+, sources = [ "src/**/*.purs", "test/*.purs", "bin/Bin/*.purs" ]
 }

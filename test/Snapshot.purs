@@ -6,7 +6,7 @@ import Control.MonadZero (guard)
 import Data.Array (mapMaybe)
 import Data.Array as Array
 import Data.Array.NonEmpty as NEA
-import Data.Either (Either(..), hush)
+import Data.Either (Either(..))
 import Data.Foldable (foldMap)
 import Data.FoldableWithIndex (foldMapWithIndex)
 import Data.Map as Map
@@ -38,8 +38,7 @@ import PureScript.CST.Errors (printParseError)
 import PureScript.CST.Tidy (class FormatError, FormatOptions)
 import PureScript.CST.Tidy as Tidy
 import PureScript.CST.Types (Module)
-import Test.FormatDirective (FormatDirective, defaultFormat, directiveRegex, formatDirective, parseDirectivesFromModule)
-import Text.Parsing.StringParser (Parser, runParser)
+import Test.FormatDirective (defaultFormat, directiveRegex, parseDirectivesFromModule)
 
 data SnapshotResult
   = Passed
@@ -142,10 +141,7 @@ snapshotFormat directory accept mbPattern = do
               # Regex.match directiveRegex
               # foldMap (NEA.toUnfoldable >>> Array.catMaybes)
               # map String.trim
-              # Array.mapMaybe (\input -> map (const input) $ hush $ runParser formatDirective' input)
-            where
-            formatDirective' :: forall a. Parser (FormatDirective e a)
-            formatDirective' = formatDirective
+              # Array.mapMaybe (\input -> if String.contains (String.Pattern "@format") input then Just input else Nothing)
 
           matchedOutputs =
             storedOutput
