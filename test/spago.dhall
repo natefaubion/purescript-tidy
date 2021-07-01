@@ -10,8 +10,10 @@
   , "either"
   , "exceptions"
   , "foldable-traversable"
+  , "integers"
   , "lists"
   , "maybe"
+  , "numbers"
   , "debug"
   , "node-buffer"
   , "node-child-process"
@@ -24,6 +26,7 @@
   , "prelude"
   , "purescript-language-cst-parser"
   , "strings"
+  , "string-parsers"
   , "tuples"
   ]
 , packages = ../packages.dhall

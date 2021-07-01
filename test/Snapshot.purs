@@ -6,19 +6,20 @@ import Control.MonadZero (guard)
 import Data.Array (mapMaybe)
 import Data.Array as Array
 import Data.Array.NonEmpty as NEA
-import Data.Either (Either(..))
-import Data.Foldable (fold, foldMap)
-import Data.Maybe (Maybe(..), isNothing)
+import Data.Either (Either(..), hush)
+import Data.Foldable (foldMap)
+import Data.FoldableWithIndex (foldMapWithIndex)
+import Data.Map as Map
+import Data.Maybe (Maybe(..))
 import Data.Posix.Signal (Signal(..))
+import Data.Set as Set
 import Data.String (Pattern(..), stripSuffix)
 import Data.String as String
-import Data.String.Regex (Regex)
 import Data.String.Regex as Regex
-import Data.String.Regex.Flags (global)
-import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
-import Dodo (PrintOptions, twoSpaces)
+import Debug (spy)
+import Dodo (PrintOptions)
 import Dodo as Dodo
 import Effect (Effect)
 import Effect.Aff (Aff, Error, catchError, effectCanceler, makeAff, try)
@@ -35,9 +36,11 @@ import Node.Path (FilePath, basename)
 import Node.Path as Path
 import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (printParseError)
-import PureScript.CST.Tidy (class FormatError, TypeArrowOption(..), FormatOptions, defaultFormatOptions)
+import PureScript.CST.Tidy (class FormatError, FormatOptions)
 import PureScript.CST.Tidy as Tidy
-import PureScript.CST.Types (Comment(..), Module(..), ModuleHeader(..))
+import PureScript.CST.Types (Module)
+import Test.FormatDirective (FormatDirective, defaultFormat, directiveRegex, formatDirective, parseDirectivesFromModule)
+import Text.Parsing.StringParser (Parser, runParser)
 
 data SnapshotResult
   = Passed
@@ -92,45 +95,62 @@ snapshotFormat directory accept mbPattern = do
         pure { name, results: [ { output: "", result: Failed formattedError } ] }
 
   runSnapshotForModule :: forall e. FormatError e => String -> FilePath -> Module e -> Aff SnapshotTest
-  runSnapshotForModule name outputPath mod' = do
-    let printOptions = twoSpaces { pageWidth = top :: Int }
-    let formatOptions = defaultFormatOptions
-    let { mod, options } = parseOptionsFromModule mod'
+  runSnapshotForModule name outputPath mod = do
     let
-      outputsFile =
-        options # Array.mapWithIndex \ix { original, option } -> fold do
-          [ if ix /= 0 then original <> "\n" else ""
-          , formatModule printOptions (formatOptions { typeArrowPlacement = option }) mod
-          ]
+      inputModule = parseDirectivesFromModule mod
 
-      outputsMemory = options <#> \{ option } ->
-        formatModule printOptions (formatOptions { typeArrowPlacement = option }) mod
+      formatModuleWith { printOptions, formatOptions } =
+        formatModule printOptions formatOptions inputModule.module
 
-    let acceptOutput = writeFile outputPath =<< liftEffect (Buffer.fromString (Array.intercalate "\n" outputsFile) UTF8)
+      defaultFormattedModule =
+        formatModuleWith defaultFormat
+
+      snapshotOutputs = spy "snapshotOutputs"
+        [ defaultFormattedModule
+        , foldMap formatModuleWith inputModule.directives
+        ]
+
+      snapshotOutputFileContents = spy "snapshotOutputFileContents" $ Array.intercalate "\n"
+        [ defaultFormattedModule
+        , inputModule.directives # foldMapWithIndex \directiveSource directive ->
+            directiveSource
+              <> "\n"
+              <> formatModuleWith directive
+        ]
+
+      acceptOutput =
+        writeFile outputPath
+          =<< liftEffect (Buffer.fromString snapshotOutputFileContents UTF8)
+
     savedOutputFile <- try $ readFile outputPath
     case savedOutputFile of
       Left _ -> do
         acceptOutput
-        pure { name, results: map (\output -> { result: Saved, output }) outputsMemory }
+        pure
+          { name
+          , results: map (\output -> { result: Saved, output }) snapshotOutputs
+          }
       Right buffer -> do
-        savedOutput <- liftEffect $ bufferToUTF8 buffer
+        storedOutput <- liftEffect $ bufferToUTF8 buffer
         let
+          _ = spy "storedOutput" storedOutput
           -- TODO: What if we haven't accepted an output with the same number of format permutations?
           -- TODO: Should report "No format for...."
-
-          savedOutputOptions :: Array TypeArrowOption
-          savedOutputOptions =
-            savedOutput
-              # Regex.match optionRegex
+          storedOutputDirectives :: Array String
+          storedOutputDirectives =
+            storedOutput
+              # Regex.match directiveRegex
               # foldMap (NEA.toUnfoldable >>> Array.catMaybes)
-              # Array.mapMaybe (String.trim >>> parseOption)
-              # map _.option
-              # Array.cons TypeArrowLast
+              # map String.trim
+              # Array.mapMaybe (\input -> map (const input) $ hush $ runParser formatDirective' input)
+            where
+            formatDirective' :: forall a. Parser (FormatDirective e a)
+            formatDirective' = formatDirective
 
           matchedOutputs =
-            savedOutput
-              # Regex.split optionRegex
-              # Array.zip outputsMemory
+            storedOutput
+              # Regex.split directiveRegex
+              # Array.zip snapshotOutputs
 
           checkOutput :: Tuple String String -> Aff { output :: String, result :: SnapshotResult }
           checkOutput (Tuple output saved) =
@@ -148,12 +168,12 @@ snapshotFormat directory accept mbPattern = do
           acceptedOutput output =
             pure { output, result: Accepted }
 
-        if savedOutputOptions == map _.option options then do
+        if (spy "storedOutputDirectives" storedOutputDirectives) == (spy "inputModule directives" (Set.toUnfoldable (Map.keys inputModule.directives))) then do
           results <- for matchedOutputs checkOutput
           pure { name, results }
         else if accept then do
           acceptOutput
-          results <- for outputsMemory acceptedOutput
+          results <- for snapshotOutputs acceptedOutput
           pure { name, results }
         else
           makeErrorResult name (error "Mismatched format options in output file.")
@@ -168,58 +188,3 @@ exec command = makeAff \k -> do
 
 bufferToUTF8 :: Buffer -> Effect String
 bufferToUTF8 = map (ImmutableBuffer.toString UTF8) <<< freeze
-
-parseOptionsFromModule
-  :: forall e
-   . Module e
-  -> { mod :: Module e, options :: Array { original :: String, option :: TypeArrowOption } }
-parseOptionsFromModule (Module { header: ModuleHeader header, body }) =
-  { mod
-  , options
-  }
-  where
-  headerComments = header.keyword.leadingComments
-
-  defaultOptions :: forall a. FormatOptions Void a
-  defaultOptions = defaultFormatOptions
-
-  options =
-    Array.cons { original: "", option: defaultOptions.typeArrowPlacement }
-      $ Array.mapMaybe parseOptionFromComment headerComments
-
-  keyword =
-    { range: header.keyword.range
-    , trailingComments: header.keyword.trailingComments
-    , value: header.keyword.value
-    , leadingComments: Array.filter (isNothing <<< parseOptionFromComment) headerComments
-    }
-
-  strippedHeader = ModuleHeader
-    { keyword
-    , name: header.name
-    , exports: header.exports
-    , where: header.where
-    , imports: header.imports
-    }
-
-  mod = Module
-    { header: strippedHeader
-    , body
-    }
-
-  parseOptionFromComment :: forall l. Comment l -> Maybe { original :: String, option :: TypeArrowOption }
-  parseOptionFromComment = case _ of
-    Space _ -> Nothing
-    Line _ _ -> Nothing
-    Comment original@"-- @format arrow-first" -> Just { original, option: TypeArrowFirst }
-    Comment original@"-- @format arrow-last" -> Just { original, option: TypeArrowLast }
-    Comment _ -> Nothing
-
-parseOption :: String -> Maybe { original :: String, option :: TypeArrowOption }
-parseOption = case _ of
-  original@"-- @format arrow-first" -> Just { original, option: TypeArrowFirst }
-  original@"-- @format arrow-last" -> Just { original, option: TypeArrowLast }
-  _ -> Nothing
-
-optionRegex :: Regex
-optionRegex = unsafeRegex "\\n-- @format .+\\n" global
