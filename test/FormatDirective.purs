@@ -15,12 +15,13 @@ import Data.Either (Either(..))
 import Data.Int as Int
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), isNothing)
+import Data.Maybe (Maybe(..))
 import Data.Number as Number
 import Data.String.Regex (Regex)
 import Data.String.Regex.Flags (global)
 import Data.String.Regex.Unsafe (unsafeRegex)
 import Data.Tuple (Tuple(..))
+import Debug (spy)
 import Dodo (PrintOptions, twoSpaces)
 import PureScript.CST.Tidy (class FormatError, FormatOptions, TypeArrowOption(..), UnicodeOption(..), defaultFormatOptions)
 import PureScript.CST.Types (Comment(..), LineFeed, Module(..), ModuleHeader(..))
@@ -55,21 +56,32 @@ parseDirectivesFromModule (Module { header: ModuleHeader header, body }) =
   moduleNoDirectives :: Module e
   moduleNoDirectives = do
     let
-      headerNoDirectives = ModuleHeader $ header
-        { keyword
-            { leadingComments = do
-                let filterFn = isNothing <<< parseOptionFromComment
-                Array.filter filterFn header.keyword.leadingComments
-            }
-        }
+      strippedComments = stripFormatDirectives header.keyword.leadingComments
+      headerNoDirectives = ModuleHeader $ header { keyword { leadingComments = strippedComments } }
 
     Module { header: headerNoDirectives, body }
+
+  stripFormatDirectives :: Array (Comment LineFeed) -> Array (Comment LineFeed)
+  stripFormatDirectives input = case Array.uncons input of
+    Nothing ->
+      []
+    Just { head, tail } -> case parseOptionFromComment head of
+      Nothing ->
+        Array.cons head (stripFormatDirectives tail)
+      Just _ -> case Array.uncons tail of
+        Nothing ->
+          []
+        -- If we strip the comment, we should strip the trailing line as well.
+        Just { head: Line _ _, tail: tail' } ->
+          stripFormatDirectives tail'
+        Just _ ->
+          stripFormatDirectives tail
 
   parseOptionFromComment :: Comment LineFeed -> Maybe (Tuple String (FormatDirective e a))
   parseOptionFromComment = case _ of
     Comment original -> case runParser formatDirective original of
       Left _ -> Nothing
-      Right directive -> pure $ Tuple original directive
+      Right directive -> pure $ spy "parsed directive: " Tuple original directive
     _ -> Nothing
 
 type FormatDirective e a =

@@ -18,7 +18,6 @@ import Data.String as String
 import Data.String.Regex as Regex
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..))
-import Debug (spy)
 import Dodo (PrintOptions)
 import Dodo as Dodo
 import Effect (Effect)
@@ -105,15 +104,17 @@ snapshotFormat directory accept mbPattern = do
       defaultFormattedModule =
         formatModuleWith defaultFormat
 
-      snapshotOutputs = spy "snapshotOutputs"
-        [ defaultFormattedModule
-        , foldMap formatModuleWith inputModule.directives
-        ]
+      snapshotOutputs =
+        Array.cons defaultFormattedModule
+          $ map formatModuleWith
+          $ Array.fromFoldable
+          $ Map.values inputModule.directives
 
-      snapshotOutputFileContents = spy "snapshotOutputFileContents" $ Array.intercalate "\n"
+      snapshotOutputFileContents = Array.fold
         [ defaultFormattedModule
         , inputModule.directives # foldMapWithIndex \directiveSource directive ->
-            directiveSource
+            "\n"
+              <> directiveSource
               <> "\n"
               <> formatModuleWith directive
         ]
@@ -133,7 +134,6 @@ snapshotFormat directory accept mbPattern = do
       Right buffer -> do
         storedOutput <- liftEffect $ bufferToUTF8 buffer
         let
-          _ = spy "storedOutput" storedOutput
           -- TODO: What if we haven't accepted an output with the same number of format permutations?
           -- TODO: Should report "No format for...."
           storedOutputDirectives :: Array String
@@ -168,7 +168,7 @@ snapshotFormat directory accept mbPattern = do
           acceptedOutput output =
             pure { output, result: Accepted }
 
-        if (spy "storedOutputDirectives" storedOutputDirectives) == (spy "inputModule directives" (Set.toUnfoldable (Map.keys inputModule.directives))) then do
+        if storedOutputDirectives == Set.toUnfoldable (Map.keys inputModule.directives) then do
           results <- for matchedOutputs checkOutput
           pure { name, results }
         else if accept then do
