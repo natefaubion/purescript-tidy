@@ -49,12 +49,13 @@ data SnapshotResult
 
 type SnapshotTest =
   { name :: String
-  , results :: Array { output :: String, result :: SnapshotResult }
+  , results :: Array { output :: String, result :: SnapshotResult, directive :: String }
   }
 
 isBad :: SnapshotResult -> Boolean
 isBad = case _ of
   Failed _ -> true
+  ErrorRunningTest _ -> true
   _ -> false
 
 snapshotFormat :: String -> Boolean -> Maybe Pattern -> Aff (Array SnapshotTest)
@@ -70,7 +71,7 @@ snapshotFormat directory accept mbPattern = do
       pure
 
   makeErrorResult :: String -> Error -> Aff SnapshotTest
-  makeErrorResult name err = pure { name, results: [ { output: "", result: ErrorRunningTest err } ] }
+  makeErrorResult name err = pure { name, results: [ { output: "", result: ErrorRunningTest err, directive: "" } ] }
 
   runSnapshot :: String -> Aff SnapshotTest
   runSnapshot name = flip catchError (makeErrorResult name) do
@@ -90,7 +91,7 @@ snapshotFormat directory accept mbPattern = do
               <> show (err.position.line + 1)
               <> ":"
               <> show (err.position.column + 1)
-        pure { name, results: [ { output: "", result: Failed formattedError } ] }
+        pure { name, results: [ { output: "", result: Failed formattedError, directive: "" } ] }
 
   runSnapshotForModule :: forall e. FormatError e => String -> FilePath -> Module e -> Aff SnapshotTest
   runSnapshotForModule name outputPath mod = do
@@ -104,10 +105,9 @@ snapshotFormat directory accept mbPattern = do
         formatModuleWith defaultFormat
 
       snapshotOutputs =
-        Array.cons defaultFormattedModule
-          $ map formatModuleWith
-          $ Array.fromFoldable
-          $ Map.values inputModule.directives
+        Array.cons (Tuple "Default: Arrow Last" defaultFormattedModule)
+          $ map (\(Tuple s d) -> Tuple s (formatModuleWith d))
+          $ Map.toUnfoldable inputModule.directives
 
       snapshotOutputFileContents = Array.fold
         [ defaultFormattedModule
@@ -128,13 +128,11 @@ snapshotFormat directory accept mbPattern = do
         acceptOutput
         pure
           { name
-          , results: map (\output -> { result: Saved, output }) snapshotOutputs
+          , results: map (\(Tuple directive output) -> { result: Saved, output, directive }) snapshotOutputs
           }
       Right buffer -> do
         storedOutput <- liftEffect $ bufferToUTF8 buffer
         let
-          -- TODO: What if we haven't accepted an output with the same number of format permutations?
-          -- TODO: Should report "No format for...."
           storedOutputDirectives :: Array String
           storedOutputDirectives =
             storedOutput
@@ -148,21 +146,23 @@ snapshotFormat directory accept mbPattern = do
               # Regex.split directiveRegex
               # Array.zip snapshotOutputs
 
-          checkOutput :: Tuple String String -> Aff { output :: String, result :: SnapshotResult }
-          checkOutput (Tuple output saved) =
+          checkOutput :: Tuple (Tuple String String) String -> Aff { output :: String, result :: SnapshotResult, directive :: String }
+          checkOutput (Tuple (Tuple directive output) saved) =
             if output == saved then
-              pure { output, result: Passed }
+              pure { output, result: Passed, directive }
             else if accept then do
               acceptOutput
-              pure { output, result: Accepted }
+              pure { output, result: Accepted, directive }
             else do
-              { stdout: diffBuff } <- exec ("diff <(echo \"" <> output <> "\") <(echo \"" <> saved <> "\")")
+              let
+                diffCmd = "diff <(echo \"" <> output <> "\") <(echo \"" <> saved <> "\")"
+              { stdout: diffBuff } <- exec diffCmd
               diffOutput <- liftEffect $ bufferToUTF8 diffBuff
-              pure { output, result: Failed diffOutput }
+              pure { output, result: Failed diffOutput, directive }
 
-          acceptedOutput :: String -> Aff { output :: String, result :: SnapshotResult }
-          acceptedOutput output =
-            pure { output, result: Accepted }
+          acceptedOutput :: Tuple String String -> Aff { output :: String, result :: SnapshotResult, directive :: String }
+          acceptedOutput (Tuple directive output) =
+            pure { output, result: Accepted, directive }
 
         if storedOutputDirectives == Set.toUnfoldable (Map.keys inputModule.directives) then do
           results <- for matchedOutputs checkOutput

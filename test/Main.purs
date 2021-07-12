@@ -23,23 +23,24 @@ main = do
   let filter = Pattern <$> findMap (String.stripPrefix (Pattern "--filter=")) args
   launchAff_ do
     results <- snapshotFormat "./test/snapshots" accept filter
-    -- TODO: Group results by snapshot test, group under name, indent with format directive
-    for_ results \{ name, results: outputResults } -> for_ outputResults \{ output, result } -> case result of
-      Passed -> do
-        Console.log $ withGraphics (foreground Green) "✓" <> " " <> name <> " passed."
-        when printOutput $ Console.log output
-      Saved -> do
-        Console.log $ withGraphics (foreground Yellow) "✓" <> " " <> name <> " saved."
-        when printOutput $ Console.log output
-      Accepted -> do
-        Console.log $ withGraphics (foreground Yellow) "✓" <> " " <> name <> " accepted."
-        when printOutput $ Console.log output
-      Failed diff -> do
-        Console.log $ withGraphics (foreground Red) "✗" <> " " <> name <> " failed."
-        Console.log diff
-        when printOutput $ Console.log output
-      ErrorRunningTest err -> do
-        Console.log $ withGraphics (foreground Red) "✗" <> " " <> name <> " failed due to an error."
-        Console.log $ Error.message err
+    for_ results \{ name, results: outputResults } -> do
+      Console.log $ "Checking " <> name
+      for_ outputResults \{ output, result, directive } -> case result of
+        Passed -> do
+          Console.log $ withGraphics (foreground Green) "  ✓" <> " " <> directive <> " passed."
+          when printOutput $ Console.log output
+        Saved -> do
+          Console.log $ withGraphics (foreground Yellow) "  ✓" <> " " <> directive <> " saved."
+          when printOutput $ Console.log output
+        Accepted -> do
+          Console.log $ withGraphics (foreground Yellow) "  ✓" <> " " <> directive <> " accepted."
+          when printOutput $ Console.log output
+        Failed diff -> do
+          Console.log $ withGraphics (foreground Red) "  ✗" <> " " <> directive <> " failed."
+          Console.log diff
+          when printOutput $ Console.log output
+        ErrorRunningTest err -> do
+          Console.log $ withGraphics (foreground Red) "  ✗" <> " " <> directive <> " failed due to an error."
+          Console.log $ Error.message err
     when (any (any (isBad <<< _.result) <<< _.results) results) do
       liftEffect $ Process.exit 1
