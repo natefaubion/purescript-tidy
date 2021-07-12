@@ -1,7 +1,11 @@
 let upstream =
-      https://github.com/purescript/package-sets/releases/download/psc-0.14.2-20210623/packages.dhall sha256:b3dcd9b0a1f6bffa4b5e61dc80e9f3fec2fca9405d591397a5076c8fe3aed1bc
+      https://github.com/purescript/package-sets/releases/download/psc-0.14.2-20210629/packages.dhall sha256:534c490bb73cae75adb5a39871142fd8db5c2d74c90509797a80b8bb0d5c3f7b
 
-let overrides = {=}
+let overrides =
+      { node-child-process =
+              upstream.node-child-process
+          //  { version = "5144eaa197a17ac33a12242fd721b9f412b4e4bf" }
+      }
 
 let additions =
       { purescript-language-cst-parser =

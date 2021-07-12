@@ -105,7 +105,7 @@ snapshotFormat directory accept mbPattern = do
         formatModuleWith defaultFormat
 
       snapshotOutputs =
-        Array.cons (Tuple "Default: Arrow Last" defaultFormattedModule)
+        Array.cons (Tuple "Default formatting" defaultFormattedModule)
           $ map (\(Tuple s d) -> Tuple s (formatModuleWith d))
           $ Map.toUnfoldable inputModule.directives
 
@@ -179,7 +179,7 @@ snapshotFormat directory accept mbPattern = do
 
 exec :: String -> Aff ExecResult
 exec command = makeAff \k -> do
-  childProc <- ChildProcess.exec command defaultExecOptions (k <<< pure)
+  childProc <- ChildProcess.exec command (defaultExecOptions { shell = Just "/bin/bash" }) (k <<< pure)
   pure $ effectCanceler $ ChildProcess.kill SIGABRT childProc
 
 bufferToUTF8 :: Buffer -> Effect String

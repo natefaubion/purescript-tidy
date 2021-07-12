@@ -14,7 +14,6 @@
   , "foldable-traversable"
   , "lists"
   , "maybe"
-  , "debug"
   , "node-buffer"
   , "node-child-process"
   , "node-fs-aff"
