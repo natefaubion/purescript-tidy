@@ -4,7 +4,7 @@ let upstream =
 let overrides =
       { node-child-process =
               upstream.node-child-process
-          //  { version = "5144eaa197a17ac33a12242fd721b9f412b4e4bf" }
+          //  { version = "v7.1.0" }
       }
 
 let additions =
