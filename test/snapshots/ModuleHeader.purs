@@ -1,1 +1,2 @@
-module Foo.Bar where
+module
+  Foo.Bar where

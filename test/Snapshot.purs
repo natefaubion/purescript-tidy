@@ -4,17 +4,26 @@ import Prelude
 
 import Control.MonadZero (guard)
 import Data.Array (mapMaybe)
+import Data.Array as Array
+import Data.Array.NonEmpty as NEA
 import Data.Either (Either(..))
+import Data.Foldable (foldMap)
+import Data.FoldableWithIndex (foldMapWithIndex)
+import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Posix.Signal (Signal(..))
+import Data.Set as Set
 import Data.String (Pattern(..), stripSuffix)
 import Data.String as String
+import Data.String.Regex as Regex
 import Data.Traversable (for)
-import Dodo (PrintOptions, twoSpaces)
+import Data.Tuple (Tuple(..))
+import Dodo (PrintOptions)
 import Dodo as Dodo
 import Effect (Effect)
 import Effect.Aff (Aff, Error, catchError, effectCanceler, makeAff, try)
 import Effect.Class (liftEffect)
+import Effect.Exception (error)
 import Node.Buffer (Buffer, freeze)
 import Node.Buffer as Buffer
 import Node.Buffer.Immutable as ImmutableBuffer
@@ -24,12 +33,12 @@ import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readFile, readdir, writeFile)
 import Node.Path (FilePath, basename)
 import Node.Path as Path
-import Node.Stream as Stream
 import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (printParseError)
-import PureScript.CST.Tidy (class FormatError, FormatOptions, defaultFormatOptions)
+import PureScript.CST.Tidy (class FormatError, FormatOptions)
 import PureScript.CST.Tidy as Tidy
 import PureScript.CST.Types (Module)
+import Test.FormatDirective (defaultFormat, directiveRegex, parseDirectivesFromModule)
 
 data SnapshotResult
   = Passed
@@ -40,13 +49,13 @@ data SnapshotResult
 
 type SnapshotTest =
   { name :: String
-  , output :: String
-  , result :: SnapshotResult
+  , results :: Array { output :: String, result :: SnapshotResult, directive :: String }
   }
 
 isBad :: SnapshotResult -> Boolean
 isBad = case _ of
   Failed _ -> true
+  ErrorRunningTest _ -> true
   _ -> false
 
 snapshotFormat :: String -> Boolean -> Maybe Pattern -> Aff (Array SnapshotTest)
@@ -62,7 +71,7 @@ snapshotFormat directory accept mbPattern = do
       pure
 
   makeErrorResult :: String -> Error -> Aff SnapshotTest
-  makeErrorResult name err = pure { name, output: "", result: ErrorRunningTest err }
+  makeErrorResult name err = pure { name, results: [ { output: "", result: ErrorRunningTest err, directive: "" } ] }
 
   runSnapshot :: String -> Aff SnapshotTest
   runSnapshot name = flip catchError (makeErrorResult name) do
@@ -82,39 +91,95 @@ snapshotFormat directory accept mbPattern = do
               <> show (err.position.line + 1)
               <> ":"
               <> show (err.position.column + 1)
-        pure { name, output: "", result: Failed formattedError }
+        pure { name, results: [ { output: "", result: Failed formattedError, directive: "" } ] }
 
   runSnapshotForModule :: forall e. FormatError e => String -> FilePath -> Module e -> Aff SnapshotTest
   runSnapshotForModule name outputPath mod = do
-    let printOptions = twoSpaces { pageWidth = top :: Int }
-    let formatOptions = defaultFormatOptions
-    let output = formatModule printOptions formatOptions mod
-    let acceptOutput = writeFile outputPath =<< liftEffect (Buffer.fromString output UTF8)
+    let
+      inputModule = parseDirectivesFromModule mod
+
+      formatModuleWith { printOptions, formatOptions } =
+        formatModule printOptions formatOptions inputModule.module
+
+      defaultFormattedModule =
+        formatModuleWith defaultFormat
+
+      snapshotOutputs =
+        Array.cons (Tuple "Default formatting" defaultFormattedModule)
+          $ map (\(Tuple s d) -> Tuple s (formatModuleWith d))
+          $ Map.toUnfoldable inputModule.directives
+
+      snapshotOutputFileContents = Array.fold
+        [ defaultFormattedModule
+        , inputModule.directives # foldMapWithIndex \directiveSource directive ->
+            "\n"
+              <> directiveSource
+              <> "\n"
+              <> formatModuleWith directive
+        ]
+
+      acceptOutput =
+        writeFile outputPath
+          =<< liftEffect (Buffer.fromString snapshotOutputFileContents UTF8)
+
     savedOutputFile <- try $ readFile outputPath
     case savedOutputFile of
       Left _ -> do
         acceptOutput
-        pure { name, output, result: Saved }
+        pure
+          { name
+          , results: map (\(Tuple directive output) -> { result: Saved, output, directive }) snapshotOutputs
+          }
       Right buffer -> do
-        savedOutput <- liftEffect $ bufferToUTF8 buffer
-        if output == savedOutput then
-          pure { name, output, result: Passed }
+        storedOutput <- liftEffect $ bufferToUTF8 buffer
+        let
+          storedOutputDirectives :: Array String
+          storedOutputDirectives =
+            storedOutput
+              # Regex.match directiveRegex
+              # foldMap (NEA.toUnfoldable >>> Array.catMaybes)
+              # map String.trim
+              # Array.mapMaybe (\input -> if String.contains (String.Pattern "@format") input then Just input else Nothing)
+
+          matchedOutputs =
+            storedOutput
+              # Regex.split directiveRegex
+              # Array.zip snapshotOutputs
+
+          checkOutput :: Tuple (Tuple String String) String -> Aff { output :: String, result :: SnapshotResult, directive :: String }
+          checkOutput (Tuple (Tuple directive output) saved) =
+            if output == saved then
+              pure { output, result: Passed, directive }
+            else if accept then do
+              acceptOutput
+              pure { output, result: Accepted, directive }
+            else do
+              let
+                diffCmd = "diff <(echo \"" <> output <> "\") <(echo \"" <> saved <> "\")"
+              { stdout: diffBuff } <- exec diffCmd
+              diffOutput <- liftEffect $ bufferToUTF8 diffBuff
+              pure { output, result: Failed diffOutput, directive }
+
+          acceptedOutput :: Tuple String String -> Aff { output :: String, result :: SnapshotResult, directive :: String }
+          acceptedOutput (Tuple directive output) =
+            pure { output, result: Accepted, directive }
+
+        if storedOutputDirectives == Set.toUnfoldable (Map.keys inputModule.directives) then do
+          results <- for matchedOutputs checkOutput
+          pure { name, results }
         else if accept then do
           acceptOutput
-          pure { name, output, result: Accepted }
-        else do
-          { stdout: diffBuff } <- execWithStdin ("diff " <> outputPath <> " -") output
-          diffOutput <- liftEffect $ bufferToUTF8 diffBuff
-          pure { name, output, result: Failed diffOutput }
+          results <- for snapshotOutputs acceptedOutput
+          pure { name, results }
+        else
+          makeErrorResult name (error "Mismatched format options in output file.")
 
   formatModule :: forall e a. PrintOptions -> FormatOptions e a -> Module e -> String
   formatModule opts conf = Dodo.print Dodo.plainText opts <<< Tidy.toDoc <<< Tidy.formatModule conf
 
-execWithStdin :: String -> String -> Aff ExecResult
-execWithStdin command input = makeAff \k -> do
-  childProc <- ChildProcess.exec command defaultExecOptions (k <<< pure)
-  _ <- Stream.writeString (ChildProcess.stdin childProc) UTF8 input mempty
-  Stream.end (ChildProcess.stdin childProc) mempty
+exec :: String -> Aff ExecResult
+exec command = makeAff \k -> do
+  childProc <- ChildProcess.exec command (defaultExecOptions { shell = Just "/bin/bash" }) (k <<< pure)
   pure $ effectCanceler $ ChildProcess.kill SIGABRT childProc
 
 bufferToUTF8 :: Buffer -> Effect String

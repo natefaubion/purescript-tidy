@@ -2,7 +2,9 @@
 , dependencies =
   [ "aff"
   , "ansi"
+  , "argparse-basic"
   , "arrays"
+  , "bifunctors"
   , "console"
   , "control"
   , "dodo-printer"
@@ -17,7 +19,6 @@
   , "node-fs-aff"
   , "node-path"
   , "node-process"
-  , "node-streams"
   , "ordered-collections"
   , "partial"
   , "posix-types"
@@ -27,5 +28,5 @@
   , "tuples"
   ]
 , packages = ../packages.dhall
-, sources = [ "src/**/*.purs", "test/*.purs" ]
+, sources = [ "src/**/*.purs", "test/*.purs", "bin/Bin/*.purs" ]
 }
