@@ -12,10 +12,14 @@ render state =
             [ HE.onClick \_ -> CheckButtonState ]
             [ HH.text "Check button state" ]
         , HH.p_
-            [ HH.text ("Last result: " <> printButtonState state.buttonCheckState) ]
+            [ HH.text ("Last result: " <> printButtonState state.buttonCheckState)
+            ]
         ]
     , HH.div_
         [ HH.p_
-            [ HH.text ("Last message from the button: " <> printButtonState state.buttonMessageState) ]
+            [ HH.text
+                ("Last message from the button: " <> printButtonState state.buttonMessageState
+                )
+            ]
         ]
     ]
