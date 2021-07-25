@@ -24,6 +24,7 @@
   , "posix-types"
   , "prelude"
   , "purescript-language-cst-parser"
+  , "node-glob-basic"
   , "strings"
   , "tuples"
   ]
