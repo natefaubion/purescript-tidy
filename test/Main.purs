@@ -28,7 +28,7 @@ main = do
   let filter = Pattern <$> findMap (String.stripPrefix (Pattern "--filter=")) args
   let printResult = printResultGroup printOutput
   launchAff_ do
-    results@(SnapshotResultGroup { hasBad }) <- snapshotFormat "./test/snapshots" accept filter
+    results@(SnapshotResultGroup { hasBad }) <- snapshotFormat accept filter
     printResult 0 results
     when hasBad do
       liftEffect $ Process.exit 1

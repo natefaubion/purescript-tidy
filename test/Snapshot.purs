@@ -14,7 +14,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Posix.Signal (Signal(..))
 import Data.Set as Set
-import Data.String (Pattern(..), split, stripSuffix)
+import Data.String (Pattern(..), Replacement(..), split, stripSuffix)
 import Data.String as String
 import Data.String.Regex as Regex
 import Data.Traversable (for)
@@ -34,7 +34,6 @@ import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readFile, writeFile)
 import Node.Glob.Basic (expandGlobs)
 import Node.Path (FilePath)
-import Node.Path as Path
 import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (printParseError)
 import PureScript.CST.Tidy (class FormatError, FormatOptions)
@@ -66,9 +65,15 @@ newtype SnapshotResultGroup = SnapshotResultGroup
   , hasBad :: Boolean
   }
 
-snapshotFormat :: String -> Boolean -> Maybe Pattern -> Aff SnapshotResultGroup
-snapshotFormat directory accept mbPattern = do
-  paths <- mapMaybe goPath <<< Array.fromFoldable <$> expandGlobs directory [ "**/*.purs" ]
+snapshotDirectory :: { path :: String, trimPath :: String -> String }
+snapshotDirectory =
+  { path: "./test/snapshots"
+  , trimPath: String.replace (Pattern "test/snapshots/") (Replacement "")
+  }
+
+snapshotFormat :: Boolean -> Maybe Pattern -> Aff SnapshotResultGroup
+snapshotFormat accept mbPattern = do
+  paths <- mapMaybe goPath <<< Array.fromFoldable <$> expandGlobs snapshotDirectory.path [ "**/*.purs" ]
   tested <- for paths runSnapshot
   pure $ groupSnapshots tested
   where
@@ -102,12 +107,12 @@ snapshotFormat directory accept mbPattern = do
     , hasBad
     }
 
-  goPath :: String -> Maybe (Tuple (Array String) String)
+  goPath :: String -> Maybe { path :: FilePath, name :: String }
   goPath path = do
     let
       splitPath = split (Pattern "/") path
     name <- filterPath =<< stripSuffix (Pattern ".purs") =<< Array.last splitPath
-    pure $ Tuple (dropEnd 1 splitPath) name
+    pure { path, name }
 
   filterPath = case mbPattern of
     Just pat ->
@@ -119,16 +124,15 @@ snapshotFormat directory accept mbPattern = do
   makeErrorResult :: String -> Error -> Aff SnapshotTest
   makeErrorResult name err = pure { name, results: [ { output: "", result: ErrorRunningTest err, directive: "" } ] }
 
-  runSnapshot :: Tuple (Array String) String -> Aff (Tuple (Array String) SnapshotTest)
-  runSnapshot (Tuple path name) = flip catchError (map (Tuple path) <<< makeErrorResult name) do
-    let filePath = Path.concat (path <> [ name <> ".purs" ])
-    let outputPath = Path.concat (path <> [ name <> ".output" ])
-    contents <- liftEffect <<< bufferToUTF8 =<< readFile filePath
+  runSnapshot :: { path :: FilePath, name :: String } -> Aff (Tuple (Array String) SnapshotTest)
+  runSnapshot { path, name } = flip catchError (map (Tuple testPath) <<< makeErrorResult name) do
+    let outputPath = String.replace (Pattern ".purs") (Replacement ".output") path
+    contents <- liftEffect <<< bufferToUTF8 =<< readFile path
     case parseModule contents of
       ParseSucceeded mod ->
-        Tuple path <$> runSnapshotForModule name outputPath mod
+        Tuple testPath <$> runSnapshotForModule name outputPath mod
       ParseSucceededWithErrors mod _ ->
-        Tuple path <$> runSnapshotForModule name outputPath mod
+        Tuple testPath <$> runSnapshotForModule name outputPath mod
       ParseFailed err -> do
         let
           formattedError =
@@ -137,7 +141,10 @@ snapshotFormat directory accept mbPattern = do
               <> show (err.position.line + 1)
               <> ":"
               <> show (err.position.column + 1)
-        pure (Tuple path { name, results: [ { output: "", result: Failed formattedError, directive: "" } ] })
+        pure (Tuple testPath { name, results: [ { output: "", result: Failed formattedError, directive: "" } ] })
+    where
+    testPath :: Array String
+    testPath = dropEnd 1 $ String.split (Pattern "/") $ snapshotDirectory.trimPath path
 
   runSnapshotForModule :: forall e. FormatError e => String -> FilePath -> Module e -> Aff SnapshotTest
   runSnapshotForModule name outputPath mod = do
