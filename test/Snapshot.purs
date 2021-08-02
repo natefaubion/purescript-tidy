@@ -3,21 +3,22 @@ module Test.Snapshot where
 import Prelude
 
 import Control.MonadZero (guard)
-import Data.Array (mapMaybe)
+import Data.Array (dropEnd, mapMaybe)
 import Data.Array as Array
 import Data.Array.NonEmpty as NEA
 import Data.Either (Either(..))
-import Data.Foldable (foldMap)
+import Data.Foldable (foldMap, foldl)
 import Data.FoldableWithIndex (foldMapWithIndex)
+import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Posix.Signal (Signal(..))
 import Data.Set as Set
-import Data.String (Pattern(..), stripSuffix)
+import Data.String (Pattern(..), Replacement(..), split, stripSuffix)
 import Data.String as String
 import Data.String.Regex as Regex
 import Data.Traversable (for)
-import Data.Tuple (Tuple(..))
+import Data.Tuple (Tuple(..), fst)
 import Dodo (PrintOptions)
 import Dodo as Dodo
 import Effect (Effect)
@@ -30,9 +31,9 @@ import Node.Buffer.Immutable as ImmutableBuffer
 import Node.ChildProcess (ExecResult, defaultExecOptions)
 import Node.ChildProcess as ChildProcess
 import Node.Encoding (Encoding(..))
-import Node.FS.Aff (readFile, readdir, writeFile)
-import Node.Path (FilePath, basename)
-import Node.Path as Path
+import Node.FS.Aff (readFile, writeFile)
+import Node.Glob.Basic (expandGlobs)
+import Node.Path (FilePath)
 import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (printParseError)
 import PureScript.CST.Tidy (class FormatError, FormatOptions)
@@ -58,11 +59,61 @@ isBad = case _ of
   ErrorRunningTest _ -> true
   _ -> false
 
-snapshotFormat :: String -> Boolean -> Maybe Pattern -> Aff (Array SnapshotTest)
-snapshotFormat directory accept mbPattern = do
-  paths <- mapMaybe (filterPath <=< stripSuffix (Pattern ".purs") <<< basename) <$> readdir directory
-  for paths runSnapshot
+newtype SnapshotResultGroup = SnapshotResultGroup
+  { results :: Array SnapshotTest
+  , nested :: Map String SnapshotResultGroup
+  , hasBad :: Boolean
+  }
+
+snapshotDirectory :: { path :: String, trimPath :: String -> String }
+snapshotDirectory =
+  { path: "./test/snapshots"
+  , trimPath: String.replace (Pattern "test/snapshots/") (Replacement "")
+  }
+
+snapshotFormat :: Boolean -> Maybe Pattern -> Aff SnapshotResultGroup
+snapshotFormat accept mbPattern = do
+  paths <- mapMaybe goPath <<< Array.fromFoldable <$> expandGlobs snapshotDirectory.path [ "**/*.purs" ]
+  tested <- for paths runSnapshot
+  pure $ groupSnapshots tested
   where
+  groupSnapshots :: Array (Tuple (Array String) SnapshotTest) -> SnapshotResultGroup
+  groupSnapshots =
+    Array.sortWith fst
+      >>> foldl addToGroup (emptyGroup false)
+
+  addToGroup :: SnapshotResultGroup -> Tuple (Array String) SnapshotTest -> SnapshotResultGroup
+  addToGroup (SnapshotResultGroup { results, nested, hasBad }) (Tuple path result) = do
+    let
+      badResult = Array.any (_.result >>> isBad) result.results
+    case Array.uncons path of
+      Nothing ->
+        SnapshotResultGroup
+          { results: Array.snoc results result
+          , nested
+          , hasBad: hasBad || badResult
+          }
+      Just { head, tail } ->
+        SnapshotResultGroup
+          { results
+          , nested: Map.alter (fromMaybe (emptyGroup badResult) >>> flip addToGroup (Tuple tail result) >>> Just) head nested
+          , hasBad: hasBad || badResult
+          }
+
+  emptyGroup :: Boolean -> SnapshotResultGroup
+  emptyGroup hasBad = SnapshotResultGroup
+    { results: []
+    , nested: Map.empty
+    , hasBad
+    }
+
+  goPath :: String -> Maybe { path :: FilePath, name :: String }
+  goPath path = do
+    let
+      splitPath = split (Pattern "/") path
+    name <- filterPath =<< stripSuffix (Pattern ".purs") =<< Array.last splitPath
+    pure { path, name }
+
   filterPath = case mbPattern of
     Just pat ->
       \path ->
@@ -73,16 +124,15 @@ snapshotFormat directory accept mbPattern = do
   makeErrorResult :: String -> Error -> Aff SnapshotTest
   makeErrorResult name err = pure { name, results: [ { output: "", result: ErrorRunningTest err, directive: "" } ] }
 
-  runSnapshot :: String -> Aff SnapshotTest
-  runSnapshot name = flip catchError (makeErrorResult name) do
-    let filePath = Path.concat [ directory, name <> ".purs" ]
-    let outputPath = Path.concat [ directory, name <> ".output" ]
-    contents <- liftEffect <<< bufferToUTF8 =<< readFile filePath
+  runSnapshot :: { path :: FilePath, name :: String } -> Aff (Tuple (Array String) SnapshotTest)
+  runSnapshot { path, name } = flip catchError (map (Tuple testPath) <<< makeErrorResult name) do
+    let outputPath = String.replace (Pattern ".purs") (Replacement ".output") path
+    contents <- liftEffect <<< bufferToUTF8 =<< readFile path
     case parseModule contents of
       ParseSucceeded mod ->
-        runSnapshotForModule name outputPath mod
+        Tuple testPath <$> runSnapshotForModule name outputPath mod
       ParseSucceededWithErrors mod _ ->
-        runSnapshotForModule name outputPath mod
+        Tuple testPath <$> runSnapshotForModule name outputPath mod
       ParseFailed err -> do
         let
           formattedError =
@@ -91,7 +141,10 @@ snapshotFormat directory accept mbPattern = do
               <> show (err.position.line + 1)
               <> ":"
               <> show (err.position.column + 1)
-        pure { name, results: [ { output: "", result: Failed formattedError, directive: "" } ] }
+        pure (Tuple testPath { name, results: [ { output: "", result: Failed formattedError, directive: "" } ] })
+    where
+    testPath :: Array String
+    testPath = dropEnd 1 $ String.split (Pattern "/") $ snapshotDirectory.trimPath path
 
   runSnapshotForModule :: forall e. FormatError e => String -> FilePath -> Module e -> Aff SnapshotTest
   runSnapshotForModule name outputPath mod = do
