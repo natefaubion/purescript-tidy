@@ -63,7 +63,6 @@ main = do
           logIndented (lvl + 2) $ Error.message err
 
     for_ (Map.toUnfoldable nested :: Array (Tuple String SnapshotResultGroup)) \(Tuple path group) -> do
-      logIndented lvl "================="
       logIndented lvl (correctCase path)
       printResultGroup printOutput (lvl + 1) group
 

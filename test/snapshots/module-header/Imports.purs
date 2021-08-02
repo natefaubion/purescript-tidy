@@ -2,6 +2,7 @@ module Foo where
 
 import Prelude
 
+
 import Conduit.Prelude
 
 import Effect (log)
@@ -9,10 +10,10 @@ import Data.Functor (class Functor, map, void)
 import Data.Either (Either())
 
 import Data.List hiding (cons)
-import Data.Maybe (Maybe(Just, Nothing), maybe)
+import Data.Maybe (Maybe (Just, Nothing), maybe)
 import Prelude
   ( class Semiring
-  , Ordering(EQ, GT, LT)
+  , Ordering (EQ, GT, LT)
   , Void
   , compose
   , one
@@ -21,9 +22,14 @@ import Prelude
   , (~>)
   )
 
-import Data.Map
-  ( singleton
-  , empty
-  ) as Data.Map
+import Data.Map (singleton
+ , empty) as Data.Map
 import Data.List as List
-import Data.Maybe as Maybe
+import Data.Maybe
+             as Maybe
+
+import Data.OK
+  hiding
+  (   {- oh -} whatever, ok, huh)
+import Nice (    Foo , class Argh)
+ as Bar
