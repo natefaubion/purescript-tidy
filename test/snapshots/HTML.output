@@ -18,7 +18,7 @@ render state =
     , HH.div_
         [ HH.p_
             [ HH.text
-                ("Last message from the button: " <> printButtonState state.buttonMessageState
+                ( "Last message from the button: " <> printButtonState state.buttonMessageState
                 )
             ]
         ]

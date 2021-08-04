@@ -18,8 +18,9 @@ ints = [ 10, 9, 8, 7, 6, 5 ]
 bools :: Array Boolean
 bools =
   [ (a && b || c)
-  , (a &&
-      (b || (c && d)))
+  , ( a &&
+        (b || (c && d))
+    )
   , (a && (c && d))
   ]
 

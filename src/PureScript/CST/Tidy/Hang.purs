@@ -4,7 +4,9 @@ module PureScript.CST.Tidy.Hang
   , hangWithIndent
   , hangBreak
   , hangApp
-  , hangOp
+  , hangOps
+  , hangHead
+  , overHangHead
   , hangConcatApp
   , toFormatDoc
   ) where
@@ -15,13 +17,14 @@ import Data.Array (foldr)
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Maybe (maybe)
+import Data.Tuple (Tuple(..), uncurry)
 import Dodo (Doc)
 import Dodo as Dodo
-import PureScript.CST.Tidy.Doc (ForceBreak(..), FormatDoc(..), flexGroup)
+import PureScript.CST.Tidy.Doc (ForceBreak(..), FormatDoc(..), anchor, flexGroup, forceBreak)
 
 data HangingDoc a
   = HangBreak (FormatDoc a)
-  | HangOp (Doc a -> Doc a) (FormatDoc a) (HangingDoc a)
+  | HangOps (Doc a -> Doc a) (HangingDoc a) (NonEmptyArray (Tuple (FormatDoc a) (HangingDoc a)))
   | HangApp (Doc a -> Doc a) (HangingDoc a) (NonEmptyArray (HangingDoc a))
 
 hang :: forall a. FormatDoc a -> HangingDoc a -> HangingDoc a
@@ -36,18 +39,33 @@ hangBreak = HangBreak <<< flexGroup
 hangApp :: forall a. HangingDoc a -> NonEmptyArray (HangingDoc a) -> HangingDoc a
 hangApp = HangApp Dodo.indent
 
-hangOp :: forall a. FormatDoc a -> HangingDoc a -> HangingDoc a
-hangOp = HangOp Dodo.indent <<< flexGroup
+hangOps :: forall a. HangingDoc a -> NonEmptyArray (Tuple (FormatDoc a) (HangingDoc a)) -> HangingDoc a
+hangOps = HangOps Dodo.indent
 
 hangConcatApp :: forall a. HangingDoc a -> NonEmptyArray (HangingDoc a) -> HangingDoc a
 hangConcatApp a b = case a of
   HangApp ind head tail -> HangApp ind head (tail <> b)
   _ -> HangApp Dodo.indent a b
 
+hangHead :: forall a. HangingDoc a -> FormatDoc a
+hangHead = case _ of
+  HangBreak doc -> doc
+  HangOps _ doc _ -> hangHead doc
+  HangApp _ doc _ -> hangHead doc
+
+overHangHead :: forall a. (FormatDoc a -> FormatDoc a) -> HangingDoc a -> HangingDoc a
+overHangHead f = go
+  where
+  go = case _ of
+    HangBreak doc -> HangBreak (f doc)
+    HangOps ind doc docs -> HangOps ind (go doc) docs
+    HangApp ind doc docs -> HangApp ind (go doc) docs
+
 data HangStk a
   = HangStkRoot
   | HangStkApp (HangStk a) (Doc a -> Doc a) (HangingDoc a) (Array (HangingDoc a))
-  | HangStkOp (HangStk a) (Doc a -> Doc a) (FormatDoc a)
+  | HangStkOps (HangStk a) (Doc a -> Doc a) (HangingDoc a) (Array (Tuple (FormatDoc a) (HangingDoc a)))
+  | HangStkOp (HangStk a) (FormatDoc a)
 
 data FormatDoc' a = FormatDoc' ForceBreak Int Boolean (Doc a) ForceBreak
 
@@ -69,8 +87,11 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
   followLast stk = case _ of
     HangBreak doc ->
       unwindStack (formatBreak doc) stk
-    HangOp ind doc docs ->
-      followLast (HangStkOp stk ind doc) docs
+    HangOps ind doc docs ->
+      followLast (HangStkOp (HangStkOps stk ind doc init) op) last
+      where
+      { init, last: Tuple op last } =
+        NonEmptyArray.unsnoc docs
     HangApp ind doc docs ->
       followLast (HangStkApp stk ind doc init) last
       where
@@ -88,8 +109,13 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
           _ ->
             formatMultilineApp (toFormatDoc head) args
       unwindStack next stk
-    HangStkOp stk ind op ->
-      unwindStack (formatOp ind op accum) stk
+    HangStkOps stk ind head tail -> do
+      let
+        args = foldr (formatArg <<< unHangDoc <<< uncurry formatInitOp) accum tail
+        next = formatApp ind (toFormatDoc head) args
+      unwindStack next stk
+    HangStkOp stk op ->
+      unwindStack (formatOp op accum) stk
     HangStkRoot ->
       accum
 
@@ -141,8 +167,29 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
             docBreak)
           fr2)
 
-  formatOp :: (Doc a -> Doc a) -> FormatDoc a -> HangDoc a -> HangDoc a
-  formatOp = formatApp -- Currently the same as an app, but that could change.
+  formatOp :: FormatDoc a -> HangDoc a -> HangDoc a
+  formatOp = case _, _ of
+    FormatEmpty, b ->
+      b
+    a, HangEmpty ->
+      formatBreak a
+    FormatDoc fl1 n1 m1 doc1 fr1, HangGroup docGroup docBreak (FormatDoc' fl2 n2 _ doc2 fr2) -> do
+      let docIndent = Dodo.indent docGroup
+      HangGroup
+        (Dodo.flexSelect
+          (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))
+          docGroup
+          docIndent)
+        (forceBreaks n1 <> doc1 <> docIndent)
+        (FormatDoc' fl1 n1 m1 (Dodo.flexGroup doc1 <> (if fr1 == ForceBreak || fl2 == ForceBreak || n2 > 0 then Dodo.indent docBreak else Dodo.space <> doc2)) fr2)
+
+  formatInitOp :: FormatDoc a -> HangingDoc a -> HangDoc a
+  formatInitOp op doc = case op, hangHead doc of
+    FormatDoc fl1 n1 m1 doc1 fr1, FormatDoc fl2 n2 m2 _ _
+      | fl1 /= ForceBreak && n1 == 0 && fr1 /= ForceBreak && fl2 /= ForceBreak && n2 > 0 ->
+          formatInitOp (forceBreak op) (overHangHead anchor doc)
+    _, _ ->
+      formatOp op (followLast HangStkRoot doc)
 
   formatBreak :: FormatDoc a -> HangDoc a
   formatBreak = case _ of

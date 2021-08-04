@@ -14,7 +14,7 @@ module PureScript.CST.Tidy
   ) where
 
 import Prelude
-import Prim hiding (Row, Type)
+import Prim hiding (Row,Type)
 
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
@@ -33,7 +33,7 @@ import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
 import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
 import PureScript.CST.Tidy.Doc (FormatDoc, toDoc) as Exports
-import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp, hangOp, hangWithIndent)
+import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp, hangOps, hangWithIndent)
 import PureScript.CST.Tidy.Hang as Hang
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), PrecedenceMap, QualifiedOperator(..), toOperatorTree)
 import PureScript.CST.Tidy.Token (UnicodeOption(..)) as Exports
@@ -430,15 +430,14 @@ formatInstanceHead :: forall e a. Format (Tuple (InstanceHead e) (Maybe SourceTo
 formatInstanceHead conf (Tuple hd mbWh) =
   formatToken conf hd.keyword `space` indent do
     anchor (formatName conf hd.name)
-      `space`
-        anchor (formatToken conf hd.separator)
+      `space` anchor (formatToken conf hd.separator)
       `flexSpaceBreak` do
         foldMap (formatConstraints conf) hd.constraints
           `spaceBreak` flexGroup do
             formatQualifiedName conf hd.className
-              `space` indent do
-                joinWithMap spaceBreak (formatType conf) hd.types
-              `spaceBreak` foldMap (formatToken conf) mbWh
+              `space` indent (joinWithMap spaceBreak (formatType conf) hd.types)
+      `space`
+        foldMap (anchor <<< formatToken conf) mbWh
 
 formatInstanceBinding :: forall e a. Format (InstanceBinding e) e a
 formatInstanceBinding conf = case _ of
@@ -655,7 +654,7 @@ formatHangingExpr conf = case _ of
   ExprRecord fields ->
     hangBreak $ formatBasicList (formatRecordLabeled formatExpr) conf fields
   ExprParens expr ->
-    hangBreak $ formatParens formatExpr conf expr
+    hangBreak $ formatParensBlock formatExpr conf expr
   ExprTyped expr separator ty ->
     hangBreak $ formatSignature conf $ Labeled
       { label: formatExpr conf expr
@@ -959,14 +958,21 @@ formatHangingOperatorTree formatOperator format conf = go
   go = case _ of
     OpPure a -> format conf a
     OpList head _ tail ->
-      hangConcatApp (go head)
-        (map (\(Tuple op b) -> formatOperator conf op `hangOp` go b) tail)
+      hangOps
+        (go head)
+        (map (\(Tuple op b) -> Tuple (formatOperator conf op) (go b)) tail)
 
 formatParens :: forall e a b. Format b e a -> Format (Wrapped b) e a
 formatParens format conf (Wrapped { open, value, close }) =
   formatToken conf open
     <> anchor (format conf value)
     <> formatToken conf close
+
+formatParensBlock :: forall e a b. Format b e a -> Format (Wrapped b) e a
+formatParensBlock format conf (Wrapped { open, value, close }) =
+  flexGroup $ formatToken conf open
+    `softSpace` align 2 (anchor (format conf value))
+    `softBreak` formatToken conf close
 
 formatBasicList :: forall e a b. Format b e a -> Format (Delimited b) e a
 formatBasicList = formatDelimited space spaceBreak 2

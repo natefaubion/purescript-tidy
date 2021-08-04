@@ -6,6 +6,7 @@ module PureScript.CST.Tidy.Doc
   , trailingLineComment
   , blockComment
   , anchor
+  , forceBreak
   , indent
   , align
   , alignCurrentColumn
@@ -77,6 +78,13 @@ anchor = case _ of
     FormatEmpty
   FormatDoc fl n m doc fr ->
     FormatDoc fl 0 (if n > 0 then true else m) doc fr
+
+forceBreak :: forall a. FormatDoc a -> FormatDoc a
+forceBreak = case _ of
+  FormatEmpty ->
+    FormatEmpty
+  FormatDoc _ n m doc fr ->
+    FormatDoc ForceBreak n m doc fr
 
 flexGroup :: forall a. FormatDoc a -> FormatDoc a
 flexGroup = case _ of
