@@ -229,10 +229,11 @@ formatDecl :: forall e a. Format (Declaration e) e a
 formatDecl conf = case _ of
   DeclData head (Just (Tuple equals (Separated ctors))) ->
     if Array.null ctors.tail then
-      declare
+      declareHanging
         (formatDataHead conf head)
+        space
         (formatToken conf equals)
-        (formatDataCtor conf ctors.head)
+        (formatHangingDataCtor conf ctors.head)
     else
       formatDataHead conf head `flexSpaceBreak` indent do
         formatDataElem (Tuple equals ctors.head)
@@ -246,16 +247,18 @@ formatDecl conf = case _ of
     formatDataHead conf head
 
   DeclType head equals ty ->
-    declare
+    declareHanging
       (formatDataHead conf head)
+      space
       (formatToken conf equals)
-      (formatType conf ty)
+      (formatHangingType conf ty)
 
   DeclNewtype head equals name ty ->
-    declare
+    declareHanging
       (formatDataHead conf head)
+      space
       (formatToken conf equals)
-      (formatDataCtor conf (DataCtor { name, fields: [ ty ] }))
+      (formatHangingDataCtor conf (DataCtor { name, fields: [ ty ] }))
 
   DeclRole kw1 kw2 name rls ->
     flatten $ words <> NonEmptyArray.toArray roles
@@ -368,9 +371,16 @@ formatDataHead conf { keyword, name, vars } =
       `flexSpaceBreak` joinWithMap spaceBreak (formatTypeVarBinding conf) vars
 
 formatDataCtor :: forall e a. Format (DataCtor e) e a
-formatDataCtor conf (DataCtor { name, fields }) =
-  formatName conf name `flexSpaceBreak` indent do
-    joinWithMap spaceBreak (formatType conf) fields
+formatDataCtor conf = Hang.toFormatDoc <<< formatHangingDataCtor conf
+
+formatHangingDataCtor :: forall e a. FormatHanging (DataCtor e) e a
+formatHangingDataCtor conf (DataCtor { name, fields }) =
+  case NonEmptyArray.fromArray fields of
+    Nothing -> hangingName
+    Just fs -> hangApp hangingName $ formatHangingType conf <$> fs
+  where
+  hangingName =
+    hangBreak $ formatName conf name
 
 formatClassHead :: forall e a. Format (Tuple (ClassHead e) (Maybe SourceToken)) e a
 formatClassHead conf (Tuple cls wh) =
@@ -665,7 +675,7 @@ formatHangingExpr conf = case _ of
   ExprArray exprs ->
     hangBreak $ formatBasicList formatExpr conf exprs
   ExprRecord fields ->
-    hangBreak $ formatBasicList (formatRecordLabeled formatExpr) conf fields
+    hangBreak $ formatBasicList (formatRecordLabeled formatHangingExpr) conf fields
   ExprParens expr ->
     hangBreak $ formatParensBlock formatExpr conf expr
   ExprTyped expr separator ty ->
@@ -792,7 +802,7 @@ formatElseIfChain conf = joinWithMap flexSpaceBreak case _ of
 formatRecordUpdate :: forall e a. Format (RecordUpdate e) e a
 formatRecordUpdate conf = case _ of
   RecordUpdateLeaf n t expr ->
-    declare (formatName conf n) (formatToken conf t) (flexGroup (formatExpr conf expr))
+    declareHanging (formatName conf n) space (formatToken conf t) (formatHangingExpr conf expr)
   RecordUpdateBranch n upd ->
     formatName conf n `flexSpaceBreak` indent do
       formatBasicListNonEmpty formatRecordUpdate conf upd
@@ -941,7 +951,7 @@ formatHangingBinder conf = case _ of
   BinderArray binders ->
     hangBreak $ formatBasicList formatBinder conf binders
   BinderRecord binders ->
-    hangBreak $ formatBasicList (formatRecordLabeled formatBinder) conf binders
+    hangBreak $ formatBasicList (formatRecordLabeled formatHangingBinder) conf binders
   BinderParens binder ->
     hangBreak $ formatParens formatBinder conf binder
   BinderTyped binder separator ty ->
@@ -956,14 +966,12 @@ formatHangingBinder conf = case _ of
   BinderError e ->
     hangBreak $ conf.formatError e
 
-formatRecordLabeled :: forall b e a. Format b e a -> Format (RecordLabeled b) e a
+formatRecordLabeled :: forall b e a. FormatHanging b e a -> Format (RecordLabeled b) e a
 formatRecordLabeled format conf = case _ of
   RecordPun n ->
     formatName conf n
   RecordField label separator value ->
-    formatName conf label <> indent do
-      flexGroup $ anchor (formatToken conf separator)
-        `spaceBreak` anchor (flexGroup (format conf value))
+    declareHanging (formatName conf label) (<>) (anchor (formatToken conf separator)) (format conf value)
 
 formatHangingOperatorTree :: forall e a b c. Format b e a -> FormatHanging c e a -> FormatHanging (OperatorTree b c) e a
 formatHangingOperatorTree formatOperator format conf = go
@@ -1045,10 +1053,9 @@ flatten = Array.uncons >>> foldMap format
     head `space` indent do
       joinWithMap space anchor tail
 
-declare :: forall a. FormatDoc a -> FormatDoc a -> FormatDoc a -> FormatDoc a
-declare label separator value =
-  label `space` indent do
-    anchor separator `flexSpaceBreak` anchor (flexGroup value)
+declareHanging :: forall a. FormatDoc a -> FormatSpace a -> FormatDoc a -> HangingDoc a -> FormatDoc a
+declareHanging label spc separator value =
+  label `spc` Hang.toFormatDoc (indent separator `hang` value)
 
 toQualifiedOperatorTree
   :: forall a
