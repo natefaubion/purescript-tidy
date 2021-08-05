@@ -14,7 +14,7 @@ module PureScript.CST.Tidy
   ) where
 
 import Prelude
-import Prim hiding (Row,Type)
+import Prim hiding (Row, Type)
 
 import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
@@ -449,7 +449,7 @@ formatInstanceBinding conf = case _ of
 formatTypeVarBinding :: forall e a. Format (TypeVarBinding e) e a
 formatTypeVarBinding conf = case _ of
   TypeVarKinded w ->
-    formatParens formatKindedTypeVarBinding conf w
+    formatParensBlock formatKindedTypeVarBinding conf w
   TypeVarName n ->
     formatName conf n
 
@@ -465,7 +465,20 @@ formatSignature conf (Labeled { label, separator, value }) =
     TypeArrowFirst ->
       label `flexSpaceBreak` indent do
         anchor (formatToken conf separator)
-          `space` anchor (flexGroup (formatType conf value))
+          `space` anchor (Hang.toFormatDoc (formatHangingPolytype typeAlign conf (toPolytype value)))
+      where
+      typeAlign
+        | isUnicode = align 2
+        | otherwise = align 3
+
+      isUnicode = case conf.unicode of
+        UnicodeAlways -> true
+        UnicodeNever -> false
+        UnicodeSource ->
+          case separator of
+            { value: TokDoubleColon Unicode } -> true
+            _ -> false
+
     TypeArrowLast ->
       label `space` indent do
         flexGroup $ anchor (formatToken conf separator)
@@ -498,7 +511,7 @@ formatHangingMonotype conf = case _ of
     formatHangingType conf head
       `hangApp` map (formatHangingType conf) tail
   TypeParens ty ->
-    hangBreak $ formatParens formatType conf ty
+    hangBreak $ formatParensBlock formatType conf ty
   TypeUnaryRow t ty ->
     hangBreak $ formatToken conf t `space` formatType conf ty
   TypeKinded ty1 t ty2 ->
@@ -521,7 +534,7 @@ formatType :: forall e a. Format (Type e) e a
 formatType conf = Hang.toFormatDoc <<< formatHangingType conf
 
 formatHangingType :: forall e a. FormatHanging (Type e) e a
-formatHangingType conf = formatHangingPolytype conf <<< toPolytype
+formatHangingType conf = formatHangingPolytype identity conf <<< toPolytype
 
 data Poly e
   = PolyForall SourceToken (NonEmptyArray (TypeVarBinding e)) SourceToken
@@ -545,10 +558,10 @@ toPolytype = go []
     last ->
       { init, last }
 
-formatHangingPolytype :: forall e a. FormatHanging (Polytype e) e a
-formatHangingPolytype conf { init, last } = case conf.typeArrowPlacement of
+formatHangingPolytype :: forall e a. (FormatDoc a -> FormatDoc a) -> FormatHanging (Polytype e) e a
+formatHangingPolytype ind conf { init, last } = case conf.typeArrowPlacement of
   TypeArrowFirst ->
-    hangBreak $ foldl formatPolyArrowFirst identity init $ anchor $ formatMonotype conf last
+    hangBreak $ foldl formatPolyArrowFirst ind init $ anchor $ formatMonotype conf last
     where
     isUnicode = Array.all isUnicodeArrow init
     isUnicodeArrow = case conf.unicode of
