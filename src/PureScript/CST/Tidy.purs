@@ -377,7 +377,7 @@ formatHangingDataCtor :: forall e a. FormatHanging (DataCtor e) e a
 formatHangingDataCtor conf (DataCtor { name, fields }) =
   case NonEmptyArray.fromArray fields of
     Nothing -> hangingName
-    Just fs -> hangApp hangingName $ formatHangingType conf <$> fs
+    Just fs -> hangingName `hangApp` map (formatHangingType conf) fs
   where
   hangingName =
     hangBreak $ formatName conf name
@@ -570,6 +570,8 @@ toPolytype = go []
 
 formatHangingPolytype :: forall e a. (FormatDoc a -> FormatDoc a) -> FormatHanging (Polytype e) e a
 formatHangingPolytype ind conf { init, last } = case conf.typeArrowPlacement of
+  _ | Array.null init ->
+    formatHangingMonotype conf last
   TypeArrowFirst ->
     hangBreak $ foldl formatPolyArrowFirst ind init $ anchor $ formatMonotype conf last
     where
