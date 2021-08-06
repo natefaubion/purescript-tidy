@@ -17,7 +17,7 @@
     "test": "spago -x test/spago.dhall test",
     "generate-default-operators": "spago -x script/spago.dhall run -m GenerateDefaultOperatorsModule",
     "format-self": "npm run build && node ./bin/index.js format-in-place -af -un \"src/**/*.purs\" \"test/*.purs\"",
-    "prepublish": "rm -rf output && npm run build"
+    "prepublishOnly": "rm -rf output && npm run build"
   },
   "repository": {
     "type": "git",
