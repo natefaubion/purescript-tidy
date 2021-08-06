@@ -2,6 +2,12 @@
 
 A syntax tidy-upper (formatter) for PureScript.
 
+## Install
+
+```sh
+npm install -g purs-tidy
+```
+
 ## Development
 
 ### Running `bin`
