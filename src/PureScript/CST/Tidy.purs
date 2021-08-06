@@ -439,16 +439,23 @@ formatInstance conf (Instance { head, body }) = case body of
 
 formatInstanceHead :: forall e a. Format (Tuple (InstanceHead e) (Maybe SourceToken)) e a
 formatInstanceHead conf (Tuple hd mbWh) =
-  formatToken conf hd.keyword `space` indent do
-    anchor (formatName conf hd.name)
-      `space` anchor (formatToken conf hd.separator)
-      `flexSpaceBreak` do
-        foldMap (formatConstraints conf) hd.constraints
-          `spaceBreak` flexGroup do
-            formatQualifiedName conf hd.className
-              `space` indent (joinWithMap spaceBreak (formatType conf) hd.types)
-      `space`
-        foldMap (anchor <<< formatToken conf) mbWh
+  case hd.name of
+    Just (Tuple name sep) ->
+      formatToken conf hd.keyword
+        `space` anchor (formatName conf name)
+        `space` anchor (formatToken conf sep)
+        `flexSpaceBreak` indent hdTypes
+        `space` indent (foldMap (anchor <<< formatToken conf) mbWh)
+    Nothing ->
+      formatToken conf hd.keyword
+        `flexSpaceBreak` indent hdTypes
+        `space` indent (foldMap (anchor <<< formatToken conf) mbWh)
+  where
+  hdTypes =
+    foldMap (formatConstraints conf) hd.constraints
+      `spaceBreak` flexGroup do
+        formatQualifiedName conf hd.className
+          `space` indent (joinWithMap spaceBreak (formatType conf) hd.types)
 
 formatInstanceBinding :: forall e a. Format (InstanceBinding e) e a
 formatInstanceBinding conf = case _ of

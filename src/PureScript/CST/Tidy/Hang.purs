@@ -190,7 +190,7 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
 
   formatInitOp :: FormatDoc a -> HangingDoc a -> HangDoc a
   formatInitOp op doc = case op, hangHead doc of
-    FormatDoc fl1 n1 m1 doc1 fr1, FormatDoc fl2 n2 m2 _ _
+    FormatDoc fl1 n1 _ _ fr1, FormatDoc fl2 n2 _ _ _
       | fl1 /= ForceBreak && n1 == 0 && fr1 /= ForceBreak && fl2 /= ForceBreak && n2 > 0 ->
           formatInitOp (forceBreak op) (overHangHead anchor doc)
     _, _ ->
