@@ -22,8 +22,11 @@ $ purs-tidy format < MyFile.purs
 
 ### Configuration
 
-You can view the full configuration that `purs-tidy` accepts via flags here:
-https://github.com/natefaubion/purescript-tidy/blob/main/bin/Bin/FormatOptions.purs
+You can see all configuration that `purs-tidy` accepts using the `--help` flag for the command you are using:
+
+```sh
+$ purs-tidy format-in-place --help
+```
 
 Some common options include:
 
