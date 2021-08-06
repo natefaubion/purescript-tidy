@@ -8,6 +8,28 @@ A syntax tidy-upper (formatter) for PureScript.
 npm install -g purs-tidy
 ```
 
+## Usage
+
+You can use `purs-tidy` to format files via STDIN / STDOUT or by modifying files in place:
+
+```sh
+# Formatting a collection of files in place:
+$ purs-tidy format-in-place "src/**/*.purs"
+
+# Using STDIN to format a file:
+$ purs-tidy format < MyFile.purs
+```
+
+### Configuration
+
+You can view the full configuration that `purs-tidy` accepts via flags here:
+https://github.com/natefaubion/purescript-tidy/blob/main/bin/Bin/FormatOptions.purs
+
+Some common options include:
+
+* `--indent` to set the number of spaces used in indentation, which defaults to 2 spaces
+* `--arrow-first` or `--arrow-last` to control whether type signatures put arrows first on the line or last on the line (purty-style), which defaults to arrow-last.
+
 ## Development
 
 ### Running `bin`
