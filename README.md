@@ -23,3 +23,20 @@ spago -x ./test/spago.dhall test -a "--accept"
 ```sh
 spago -x ./script/spago.dhall run -m GenerateDefaultOperatorsModule
 ```
+
+### Auto-formatting in VS Code
+
+First, install the [Run on Save](https://marketplace.visualstudio.com/items?itemName=emeraldwalk.RunOnSave) extension so that you can execute a command when your file is saved. Then, add this to your `settings.json`:
+
+```json
+  "emeraldwalk.runonsave": {
+    "commands": [
+      {
+        "match": ".purs",
+        "cmd": "$TIDY_DIR/bin/index.js format-in-place ${relativeFile}"
+      }
+    ]
+  }
+```
+
+...where `$TIDY_DIR` is replaced with the location of a checkout of `purescript-tidy`.
