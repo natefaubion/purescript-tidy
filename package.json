@@ -1,0 +1,37 @@
+{
+  "name": "purs-tidy",
+  "version": "0.1.0",
+  "description": "A syntax tidy-upper (formatter) for PureScript.",
+  "bin": {
+    "purs-tidy": "bin/index.js"
+  },
+  "directories": {
+    "test": "test"
+  },
+  "files": [
+    "bin/index.js",
+    "output/**/*.js"
+  ],
+  "scripts": {
+    "build": "spago -x bin/spago.dhall build",
+    "test": "spago -x test/spago.dhall test",
+    "generate-default-operators": "spago -x script/spago.dhall run -m GenerateDefaultOperatorsModule",
+    "format-self": "npm run build && node ./bin/index.js format-in-place -af -un \"src/**/*.purs\" \"test/*.purs\"",
+    "prepublish": "rm -rf output && npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/natefaubion/purescript-tidy.git"
+  },
+  "keywords": [
+    "PureScript",
+    "formatter",
+    "format"
+  ],
+  "author": "Nathan Faubion <nathan@n-son.com> (https://github.com/natefaubion/)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/natefaubion/purescript-tidy/issues"
+  },
+  "homepage": "https://github.com/natefaubion/purescript-tidy#readme"
+}
