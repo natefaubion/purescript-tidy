@@ -403,9 +403,10 @@ formatClassHead conf (Tuple cls wh) =
         formatListElem 2 formatFundep conf head
       `softBreak`
         joinWithMap softBreak
-          (\(Tuple sep elem) ->
-            formatToken conf sep
-              `space` formatListElem 2 formatFundep conf elem)
+          ( \(Tuple sep elem) ->
+              formatToken conf sep
+                `space` formatListElem 2 formatFundep conf elem
+          )
           tail
 
 formatConstraints :: forall e a. Format (Tuple (OneOrDelimited (Type e)) SourceToken) e a
@@ -592,8 +593,9 @@ formatHangingPolytype ind conf { init, last } = case conf.typeArrowPlacement of
         \doc ->
           k (foldl go (formatToken conf kw) vars)
             `softBreak`
-              (Monoid.guard (not isUnicode) (fromDoc (Dodo.flexAlt mempty Dodo.space))
-                <> anchor (formatToken conf dot))
+              ( Monoid.guard (not isUnicode) (fromDoc (Dodo.flexAlt mempty Dodo.space))
+                  <> anchor (formatToken conf dot)
+              )
             `space` anchor (alignCurrentColumn doc)
         where
         go doc tyVar =
@@ -716,8 +718,9 @@ formatHangingExpr conf = case _ of
 
   ExprLambda lmb ->
     hang
-      ((formatToken conf lmb.symbol <> alignCurrentColumn binders)
-        `space` indent (anchor (formatToken conf lmb.arrow)))
+      ( (formatToken conf lmb.symbol <> alignCurrentColumn binders)
+          `space` indent (anchor (formatToken conf lmb.arrow))
+      )
       (formatHangingExpr conf lmb.body)
     where
     binders = flexGroup do
@@ -736,9 +739,10 @@ formatHangingExpr conf = case _ of
 
     caseHeadExprs =
       foldl
-        (\doc (Tuple a b) ->
-          (doc <> anchor (formatToken conf a))
-            `spaceBreak` flexGroup (formatExpr conf b))
+        ( \doc (Tuple a b) ->
+            (doc <> anchor (formatToken conf a))
+              `spaceBreak` flexGroup (formatExpr conf b)
+        )
         (flexGroup (formatExpr conf head))
         tail
 
@@ -757,12 +761,15 @@ formatHangingExpr conf = case _ of
   ExprAdo adoBlock ->
     hang
       (formatToken conf adoBlock.keyword)
-      (hangBreak
-        (joinWithMap break (formatDoStatement conf) adoBlock.statements
-          `flexSpaceBreak`
-            (formatToken conf adoBlock.in
+      ( hangBreak
+          ( joinWithMap break (formatDoStatement conf) adoBlock.statements
               `flexSpaceBreak`
-                indent (formatExpr conf adoBlock.result))))
+                ( formatToken conf adoBlock.in
+                    `flexSpaceBreak`
+                      indent (formatExpr conf adoBlock.result)
+                )
+          )
+      )
 
   ExprError e ->
     hangBreak $ conf.formatError e
@@ -828,19 +835,22 @@ formatCaseBranch conf (Tuple (Separated { head, tail }) guarded) =
   where
   caseBinders =
     flexGroup $ foldl
-      (\doc (Tuple a b) ->
-        (doc <> indent (anchor (formatToken conf a)))
-          `spaceBreak` flexGroup (formatBinder conf b))
+      ( \doc (Tuple a b) ->
+          (doc <> indent (anchor (formatToken conf a)))
+            `spaceBreak` flexGroup (formatBinder conf b)
+      )
       (flexGroup (formatBinder conf head))
       tail
 
 formatGuardedExpr :: forall e a. FormatHanging (GuardedExpr e) e a
 formatGuardedExpr conf (GuardedExpr ge@{ patterns: Separated { head, tail }, where: Where { expr, bindings } }) =
   hangWithIndent (Dodo.align 2 <<< Dodo.indent)
-    (hangBreak
-      (formatToken conf ge.bar
-        `space` flexGroup patternGuards
-        `space` anchor (formatToken conf ge.separator)))
+    ( hangBreak
+        ( formatToken conf ge.bar
+            `space` flexGroup patternGuards
+            `space` anchor (formatToken conf ge.separator)
+        )
+    )
     case bindings of
       Nothing ->
         [ formatHangingExpr conf expr ]

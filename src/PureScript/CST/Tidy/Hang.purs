@@ -140,10 +140,11 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
     FormatDoc fl1 n1 m1 doc1 _, HangGroup docGroup _ (FormatDoc' _ _ _ _ fr2) -> do
       let docIndent = ind docGroup
       HangGroup
-        (Dodo.flexSelect
-          (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))
-          docGroup
-          docIndent)
+        ( Dodo.flexSelect
+            (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))
+            docGroup
+            docIndent
+        )
         (forceBreaks n1 <> doc1 <> docIndent)
         (FormatDoc' fl1 n1 m1 (Dodo.flexGroup doc1 <> docIndent) fr2)
 
@@ -155,17 +156,20 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
       formatBreak a
     FormatDoc fl1 n1 m1 doc1 _, HangGroup docGroup docBreak (FormatDoc' _ _ _ _ fr2) ->
       HangGroup
-        (Dodo.flexSelect
-          (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))
-          docGroup
-          docBreak)
-        (forceBreaks n1 <> doc1 <> docBreak)
-        (FormatDoc' fl1 n1 m1
-          (Dodo.flexSelect
-            (withBreaks fl1 n1 doc1 doc1)
+        ( Dodo.flexSelect
+            (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))
             docGroup
-            docBreak)
-          fr2)
+            docBreak
+        )
+        (forceBreaks n1 <> doc1 <> docBreak)
+        ( FormatDoc' fl1 n1 m1
+            ( Dodo.flexSelect
+                (withBreaks fl1 n1 doc1 doc1)
+                docGroup
+                docBreak
+            )
+            fr2
+        )
 
   formatOp :: FormatDoc a -> HangDoc a -> HangDoc a
   formatOp = case _, _ of
@@ -176,10 +180,11 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
     FormatDoc fl1 n1 m1 doc1 fr1, HangGroup docGroup docBreak (FormatDoc' fl2 n2 _ doc2 fr2) -> do
       let docIndent = Dodo.indent docGroup
       HangGroup
-        (Dodo.flexSelect
-          (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))
-          docGroup
-          docIndent)
+        ( Dodo.flexSelect
+            (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))
+            docGroup
+            docIndent
+        )
         (forceBreaks n1 <> doc1 <> docIndent)
         (FormatDoc' fl1 n1 m1 (Dodo.flexGroup doc1 <> (if fr1 == ForceBreak || fl2 == ForceBreak || n2 > 0 then Dodo.indent docBreak else Dodo.space <> doc2)) fr2)
 
