@@ -10,7 +10,7 @@ npm install -g purs-tidy
 
 ## Usage
 
-You can use `purs-tidy` to format files via STDIN / STDOUT or by modifying files in place:
+You can use `purs-tidy` to format files in place or via STDIN / STDOUT (which is useful for editor integration):
 
 ```sh
 # Formatting a collection of files in place:
