@@ -33,6 +33,22 @@ Some common options include:
 * `--indent` to set the number of spaces used in indentation, which defaults to 2 spaces
 * `--arrow-first` or `--arrow-last` to control whether type signatures put arrows first on the line or last on the line (purty-style), which defaults to arrow-last.
 
+You can generate a `.tidyrc.json` using the `generate-config` command. If a `.tidyrc.json` file is found, it will be used in lieu of CLI arguments.
+
+### Operator Precedence
+
+To support correct operator precedence without having to parse your entire
+source tree (potentially for a single file), `purs-tidy` uses a pre-baked
+operator precedence table. By default, `purs-tidy` ships with a table built
+from the core and contrib organizations. If you need support for more
+operators, you can generate your own table using the `generate-operators`
+command.
+
+```sh
+purs-tidy generate-operators $(spago sources) > .tidyoperators
+purs-tidy generate-config --arrow-first --unicode-never --operators .tidyoperators
+```
+
 ## Development
 
 ### Running `bin`
