@@ -79,7 +79,7 @@ parser =
           Format <$> formatOptions
             <* Arg.flagHelp
     ]
-    <* Arg.flagInfo [ "--version", "-v" ] "Shows the current version." "v1.0.0"
+    <* Arg.flagInfo [ "--version", "-v" ] "Shows the current version." "v0.1.1"
     <* Arg.flagHelp
   where
   pursGlobs =
