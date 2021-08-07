@@ -181,7 +181,9 @@ main = launchAff_ do
               Console.error $ printParseError err
               liftEffect $ Process.exit 1
             Right str ->
-              Console.log str
+              makeAff \k -> do
+                _ <- Stream.writeString Process.stdout UTF8 str (k (Right unit))
+                pure mempty
 
 readOperatorTable :: FilePath -> Aff (Array String)
 readOperatorTable path
