@@ -2,6 +2,8 @@
 , dependencies =
   [ "aff"
   , "ansi"
+  , "argonaut-codecs"
+  , "argonaut-core"
   , "argparse-basic"
   , "arrays"
   , "bifunctors"
@@ -26,6 +28,7 @@
   , "purescript-language-cst-parser"
   , "node-glob-basic"
   , "strings"
+  , "transformers"
   , "tuples"
   ]
 , packages = ../packages.dhall

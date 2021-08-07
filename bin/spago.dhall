@@ -1,13 +1,18 @@
 { name = "purescript-tidy-cli"
 , dependencies =
   [ "aff"
+  , "argonaut-codecs"
+  , "argonaut-core"
   , "argparse-basic"
   , "arrays"
   , "console"
+  , "control"
   , "dodo-printer"
   , "effect"
   , "either"
   , "foldable-traversable"
+  , "foreign-object"
+  , "lazy"
   , "lists"
   , "maybe"
   , "newtype"
@@ -27,6 +32,7 @@
   , "purescript-language-cst-parser"
   , "refs"
   , "strings"
+  , "transformers"
   , "tuples"
   ]
 , packages = ../packages.dhall

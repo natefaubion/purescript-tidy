@@ -5,26 +5,39 @@ import Prelude
 import ArgParse.Basic (ArgParser)
 import ArgParse.Basic as Arg
 import Bin.FormatOptions (FormatOptions, formatOptions)
+import Bin.FormatOptions as FormatOptions
 import Bin.Version (version)
+import Control.Monad.State (evalStateT, lift)
+import Control.Monad.State as State
 import Control.Parallel (parTraverse)
+import Data.Argonaut.Core as Json
+import Data.Argonaut.Decode (parseJson, printJsonDecodeError)
 import Data.Array as Array
-import Data.Either (Either(..))
+import Data.Either (Either(..), fromRight')
 import Data.Foldable (fold, foldMap, foldl, foldr, for_)
+import Data.Lazy (Lazy)
+import Data.Lazy as Lazy
+import Data.List (List)
+import Data.List as List
+import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Monoid (power)
 import Data.Newtype (unwrap)
 import Data.Set as Set
 import Data.String (Pattern(..))
 import Data.String as String
+import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..), snd, uncurry)
 import DefaultOperators (defaultOperators)
 import Dodo as Dodo
 import Effect (Effect)
-import Effect.Aff (Aff, launchAff_, makeAff)
+import Effect.Aff (Aff, error, launchAff_, makeAff, throwError, try)
 import Effect.Class (liftEffect)
 import Effect.Class.Console as Console
 import Effect.Ref as Ref
+import Foreign.Object (Object)
+import Foreign.Object as Object
 import Node.Buffer as Buffer
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
@@ -32,6 +45,8 @@ import Node.FS.Stats as Stats
 import Node.FS.Sync as Sync
 import Node.Glob.Basic (expandGlobsCwd, expandGlobsWithStatsCwd)
 import Node.Path (FilePath)
+import Node.Path as Path
+import Node.Process (cwd)
 import Node.Process as Process
 import Node.Stream as Stream
 import Node.WorkerBees (Worker)
@@ -42,7 +57,7 @@ import PureScript.CST (RecoveredParserResult(..), parseModule, toRecovered)
 import PureScript.CST.Errors (ParseError, printParseError)
 import PureScript.CST.Lexer as Lexer
 import PureScript.CST.ModuleGraph (ModuleSort(..), sortModules)
-import PureScript.CST.Tidy (TypeArrowOption(..), UnicodeOption(..), defaultFormatOptions, formatModule, toDoc)
+import PureScript.CST.Tidy (defaultFormatOptions, formatModule, toDoc)
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), Precedence, QualifiedOperator(..), PrecedenceMap, insertOperator, lookupOperator, remapOperators)
 import PureScript.CST.TokenStream (TokenStep(..), TokenStream)
 import PureScript.CST.TokenStream as TokenStream
@@ -50,8 +65,12 @@ import PureScript.CST.Types (Declaration(..), Export(..), FixityOp(..), Module(.
 
 data Command
   = GenerateOperators (Array String)
+  | GenerateRc FormatOptions
   | FormatInPlace FormatOptions Int (Array String)
   | Format FormatOptions
+
+rcFileName :: String
+rcFileName = ".tidyrc.json"
 
 parser :: ArgParser Command
 parser =
@@ -60,6 +79,11 @@ parser =
         "Generate an operator precedence table for better operator formatting.\nBest used with `spago sources`. Prints to stdout."
         do
           GenerateOperators <$> pursGlobs
+            <* Arg.flagHelp
+    , Arg.command [ "generate-config" ]
+        "Writes a .tidyrc file to the current working directory based\non the command line options given."
+        do
+          GenerateRc <$> formatOptions
             <* Arg.flagHelp
     , Arg.command [ "format-in-place" ]
         "Format source files in place."
@@ -108,8 +132,17 @@ main = launchAff_ do
       case cmd of
         GenerateOperators globs ->
           generateOperatorsCommand globs
-        FormatInPlace options numThreads globs -> do
-          operators <- readOperatorTable options.operators
+
+        GenerateRc cliOptions -> do
+          rcExists <- FS.exists rcFileName
+          if rcExists then do
+            Console.error $ rcFileName <> " already exists."
+            liftEffect $ Process.exit 1
+          else do
+            let contents = Json.stringifyWithIndent 2 $ FormatOptions.toJson cliOptions
+            FS.writeTextFile UTF8 rcFileName $ contents <> "\n"
+
+        FormatInPlace cliOptions numThreads globs -> do
           paths <- expandGlobsWithStatsCwd globs
           let
             files :: Array String
@@ -119,30 +152,29 @@ main = launchAff_ do
                 # Map.keys
                 # Set.toUnfoldable
 
-            workerConfig :: WorkerConfig
-            workerConfig =
-              { indent: options.indent
-              , operators
-              , ribbon: options.ribbon
-              , typeArrowPlacement:
-                  case options.typeArrowPlacement of
-                    TypeArrowFirst -> "arrow-first"
-                    TypeArrowLast -> "arrow-last"
-              , unicode:
-                  case options.unicode of
-                    UnicodeSource -> "source"
-                    UnicodeAlways -> "always"
-                    UnicodeNever -> "never"
-              , width: options.width
-              }
+          filesWithOptions <-
+            flip evalStateT Map.empty do
+              for files \filePath -> do
+                rcMap <- State.get
+                rcOptions <- State.state <<< const =<< lift (resolveRcForDir rcMap (Path.dirname filePath))
+                pure { filePath, config: toWorkerConfig $ fromMaybe cliOptions rcOptions }
 
-          results <- poolTraverse formatWorker workerConfig numThreads files
+          operatorsByPath <-
+            filesWithOptions
+              # map _.config.operatorsFile
+              # Array.nub
+              # parTraverse (\path -> Tuple path <$> readOperatorTable path)
+              # map Object.fromFoldable
+
+          results <- poolTraverse formatWorker operatorsByPath numThreads filesWithOptions
           for_ results \{ filePath, error } ->
             unless (String.null error) do
               Console.error $ filePath <> ":\n  " <> error <> "\n"
 
-        Format options -> do
-          operators <- parseOperatorTable <$> readOperatorTable options.operators
+        Format cliOptions -> do
+          Tuple rcOptions _ <- resolveRcForDir Map.empty =<< liftEffect cwd
+          let options = fromMaybe cliOptions rcOptions
+          operators <- parseOperatorTable <<< fromMaybe defaultOperators <$> traverse readOperatorTable options.operatorsFile
           contents <- readStdin
           case formatCommand options operators contents of
             Left err -> do
@@ -151,19 +183,16 @@ main = launchAff_ do
             Right str ->
               Console.log str
 
-readOperatorTable :: Maybe FilePath -> Aff (Array String)
-readOperatorTable = case _ of
-  Nothing ->
-    pure defaultOperators
-  Just path -> do
-    table <- liftEffect <<< Buffer.toString UTF8 =<< FS.readFile path
-    pure $ String.split (Pattern "\n") table
+readOperatorTable :: FilePath -> Aff (Array String)
+readOperatorTable path
+  | path == ".tidyoperators.default" = pure defaultOperators
+  | otherwise = String.split (Pattern "\n") <$> FS.readTextFile UTF8 path
 
 formatCommand :: FormatOptions -> PrecedenceMap -> String -> Either ParseError String
 formatCommand args operators contents = do
   let
     print = Dodo.print Dodo.plainText
-      { pageWidth: args.width
+      { pageWidth: fromMaybe top args.width
       , ribbonRatio: args.ribbon
       , indentWidth: args.indent
       , indentUnit: power " " args.indent
@@ -192,38 +221,50 @@ formatCommand args operators contents = do
 
 type WorkerConfig =
   { indent :: Int
-  , operators :: Array String
+  , operatorsFile :: String
   , ribbon :: Number
   , typeArrowPlacement :: String
   , unicode :: String
   , width :: Int
   }
 
-formatWorker :: Worker WorkerConfig FilePath { filePath :: FilePath, error :: String }
-formatWorker = Worker.make \{ receive, reply, workerData } -> do
+toWorkerConfig :: FormatOptions -> WorkerConfig
+toWorkerConfig options =
+  { indent: options.indent
+  , operatorsFile: fromMaybe ".tidyoperators.default" options.operatorsFile
+  , ribbon: options.ribbon
+  , typeArrowPlacement: FormatOptions.typeArrowPlacementToString options.typeArrowPlacement
+  , unicode: FormatOptions.unicodeToString options.unicode
+  , width: fromMaybe top options.width
+  }
+
+formatWorker :: Worker (Object (Array String)) { filePath :: FilePath, config :: WorkerConfig } { filePath :: FilePath, error :: String }
+formatWorker = Worker.make \{ receive, reply, workerData: operatorsByPath } -> do
   let
-    operators =
-      parseOperatorTable workerData.operators
+    parsedOperatorsByPath :: Object (Lazy PrecedenceMap)
+    parsedOperatorsByPath =
+      (\operators -> Lazy.defer \_ -> parseOperatorTable operators) <$> operatorsByPath
 
-    formatOptions =
-      { indent: workerData.indent
-      , operators: Nothing
-      , ribbon: workerData.ribbon
-      , typeArrowPlacement:
-          case workerData.typeArrowPlacement of
-            "arrow-first" -> TypeArrowFirst
-            "arrow-last" -> TypeArrowLast
-            _ -> unsafeCrashWith "Unknown typeArrowPlacement"
-      , unicode:
-          case workerData.unicode of
-            "source" -> UnicodeSource
-            "always" -> UnicodeAlways
-            "never" -> UnicodeNever
-            _ -> unsafeCrashWith "Unknown unicode"
-      , width: workerData.width
-      }
+  receive \{ filePath, config } -> do
+    let
+      operators :: PrecedenceMap
+      operators =
+        maybe Map.empty Lazy.force $ Object.lookup config.operatorsFile parsedOperatorsByPath
 
-  receive \filePath -> do
+      formatOptions :: FormatOptions
+      formatOptions =
+        { indent: config.indent
+        , operatorsFile: Nothing
+        , ribbon: config.ribbon
+        , typeArrowPlacement:
+            fromRight' (\_ -> unsafeCrashWith "Unknown typeArrowPlacement value") do
+              FormatOptions.typeArrowPlacementFromString config.typeArrowPlacement
+        , unicode:
+            fromRight' (\_ -> unsafeCrashWith "Unknown unicode value") do
+              FormatOptions.unicodeFromString config.unicode
+        , width: Just config.width
+        }
+
     contents <- Sync.readTextFile UTF8 filePath
     case formatCommand formatOptions operators contents of
       Right formatted -> do
@@ -231,6 +272,41 @@ formatWorker = Worker.make \{ receive, reply, workerData } -> do
         reply { filePath, error: "" }
       Left err ->
         reply { filePath, error: printParseError err }
+
+type RcMap = Map FilePath (Maybe FormatOptions)
+
+resolveRcForDir :: RcMap -> FilePath -> Aff (Tuple (Maybe FormatOptions) RcMap)
+resolveRcForDir = go List.Nil
+  where
+  go :: List FilePath -> RcMap -> FilePath -> Aff (Tuple (Maybe FormatOptions) RcMap)
+  go paths cache dir = case Map.lookup dir cache of
+    Just res ->
+      pure $ unwind cache res paths
+    Nothing -> do
+      let filePath = Path.concat [ dir, rcFileName ]
+      contents <- try $ FS.readTextFile UTF8 filePath
+      case contents of
+        Left _
+          | dir == Path.sep ->
+              pure $ unwind cache Nothing (List.Cons dir paths)
+          | otherwise ->
+              go (List.Cons dir paths) cache (Path.dirname dir)
+        Right contents' ->
+          case FormatOptions.fromJson =<< parseJson contents' of
+            Left jsonError ->
+              throwError $ error $ "Could not decode " <> filePath <> ": " <> printJsonDecodeError jsonError
+            Right options -> do
+              let
+                resolvedOptions =
+                  options { operatorsFile = Path.relative dir <$> options.operatorsFile }
+              pure $ unwind cache (Just resolvedOptions) (List.Cons dir paths)
+
+  unwind :: RcMap -> Maybe FormatOptions -> List FilePath -> Tuple (Maybe FormatOptions) RcMap
+  unwind cache res = case _ of
+    List.Cons p ps ->
+      unwind (Map.insert p res cache) res ps
+    List.Nil ->
+      Tuple res cache
 
 readStdin :: Aff String
 readStdin = makeAff \k -> do
