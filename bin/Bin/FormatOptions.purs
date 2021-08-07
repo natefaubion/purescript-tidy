@@ -5,12 +5,12 @@ import Prelude
 import ArgParse.Basic (ArgParser)
 import ArgParse.Basic as Arg
 import Control.Monad.Error.Class (throwError)
-import Data.Argonaut.Core (Json, jsonEmptyObject)
+import Data.Argonaut.Core (Json, jsonEmptyObject, jsonNull)
 import Data.Argonaut.Core as Json
 import Data.Argonaut.Decode (JsonDecodeError(..), decodeJson, (.:?))
-import Data.Argonaut.Encode (assoc, assocOptional, extend, extendOptional)
+import Data.Argonaut.Encode (assoc, assocOptional, encodeJson, extend, extendOptional)
 import Data.Either (Either)
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Traversable (traverse)
 import PureScript.CST.Tidy (TypeArrowOption(..), UnicodeOption(..))
 
@@ -20,7 +20,7 @@ type FormatOptions =
   , ribbon :: Number
   , typeArrowPlacement :: TypeArrowOption
   , unicode :: UnicodeOption
-  , width :: Int
+  , width :: Maybe Int
   }
 
 defaults :: FormatOptions
@@ -30,7 +30,7 @@ defaults =
   , ribbon: 1.0
   , typeArrowPlacement: TypeArrowFirst
   , unicode: UnicodeSource
-  , width: top
+  , width: Nothing
   }
 
 formatOptions :: ArgParser FormatOptions
@@ -66,7 +66,7 @@ formatOptions =
         Arg.argument [ "--width", "-w" ]
           "The maximum width of the document in columns.\nDefaults to no maximum."
           # Arg.int
-          # Arg.default defaults.width
+          # Arg.optional
     }
 
 unicodeOption :: ArgParser UnicodeOption
@@ -110,7 +110,7 @@ toJson options =
     # extend (assoc "ribbon" options.ribbon)
     # extend (assoc "typeArrowPlacement" (typeArrowPlacementToString options.typeArrowPlacement))
     # extend (assoc "unicode" (unicodeToString options.unicode))
-    # extend (assoc "width" options.width)
+    # extend (assoc "width" (maybe jsonNull encodeJson options.width))
 
 typeArrowPlacementFromString :: String -> Either JsonDecodeError TypeArrowOption
 typeArrowPlacementFromString = case _ of

@@ -15,7 +15,7 @@ import Data.Bifunctor (bimap)
 import Data.Either (Either(..))
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Monoid (power)
 import Data.String as String
 import Data.String.Regex (Regex)
@@ -104,7 +104,7 @@ parseDirectivesFromModule (Module { header: ModuleHeader header, body }) =
     { printOptions:
         { indentUnit: power " " opts.indent
         , indentWidth: opts.indent
-        , pageWidth: opts.width
+        , pageWidth: fromMaybe top opts.width
         , ribbonRatio: opts.ribbon
         }
     , formatOptions:

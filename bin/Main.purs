@@ -80,7 +80,7 @@ parser =
         do
           GenerateOperators <$> pursGlobs
             <* Arg.flagHelp
-    , Arg.command [ "generate-rc" ]
+    , Arg.command [ "generate-config" ]
         "Writes a .tidyrc file to the current working directory based\non the command line options given."
         do
           GenerateRc <$> formatOptions
@@ -192,7 +192,7 @@ formatCommand :: FormatOptions -> PrecedenceMap -> String -> Either ParseError S
 formatCommand args operators contents = do
   let
     print = Dodo.print Dodo.plainText
-      { pageWidth: args.width
+      { pageWidth: fromMaybe top args.width
       , ribbonRatio: args.ribbon
       , indentWidth: args.indent
       , indentUnit: power " " args.indent
@@ -235,7 +235,7 @@ toWorkerConfig options =
   , ribbon: options.ribbon
   , typeArrowPlacement: FormatOptions.typeArrowPlacementToString options.typeArrowPlacement
   , unicode: FormatOptions.unicodeToString options.unicode
-  , width: options.width
+  , width: fromMaybe top options.width
   }
 
 formatWorker :: Worker (Object (Array String)) { filePath :: FilePath, config :: WorkerConfig } { filePath :: FilePath, error :: String }
@@ -262,7 +262,7 @@ formatWorker = Worker.make \{ receive, reply, workerData: operatorsByPath } -> d
         , unicode:
             fromRight' (\_ -> unsafeCrashWith "Unknown unicode value") do
               FormatOptions.unicodeFromString config.unicode
-        , width: config.width
+        , width: Just config.width
         }
 
     contents <- Sync.readTextFile UTF8 filePath
