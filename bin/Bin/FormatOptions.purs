@@ -55,10 +55,10 @@ formatOptions =
     , typeArrowPlacement:
         Arg.choose "type arrow option"
           [ Arg.flag [ "--arrow-first", "-af" ]
-              "Type signatures put arrows first on the line."
+              "Type signatures put arrows first on the line.\nDefault."
               $> TypeArrowFirst
           , Arg.flag [ "--arrow-last", "-al" ]
-              "Type signatures put arrows last on the line.\nDefault."
+              "Type signatures put arrows last on the line."
               $> TypeArrowLast
           ]
           # Arg.default defaults.typeArrowPlacement
