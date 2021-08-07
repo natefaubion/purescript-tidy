@@ -51,6 +51,7 @@ data Command
   = GenerateOperators (Array String)
   | FormatInPlace FormatOptions Int (Array String)
   | Format FormatOptions
+  | Check FormatOptions Int (Array String)
 
 parser :: ArgParser Command
 parser =
@@ -65,18 +66,21 @@ parser =
         do
           FormatInPlace
             <$> formatOptions
-            <*>
-              do
-                Arg.argument [ "--threads", "-t" ]
-                  "Number of worker threads to use.\nDefaults to 4."
-                  # Arg.int
-                  # Arg.default 4
+            <*> workerOptions
             <*> pursGlobs
             <* Arg.flagHelp
     , Arg.command [ "format" ]
         "Format input over stdin."
         do
           Format <$> formatOptions
+            <* Arg.flagHelp
+    , Arg.command [ "check" ]
+        "Verify source files are formatted."
+        do
+          Check
+            <$> formatOptions
+            <*> workerOptions
+            <*> pursGlobs
             <* Arg.flagHelp
     ]
     <* Arg.flagInfo [ "--version", "-v" ] "Shows the current version." "v0.1.1"
@@ -85,6 +89,12 @@ parser =
   pursGlobs =
     Arg.anyNotFlag "PURS_GLOB" "Globs for PureScript sources."
       # Arg.unfolded1
+
+  workerOptions =
+    Arg.argument [ "--threads", "-t" ]
+      "Number of worker threads to use.\nDefaults to 4."
+      # Arg.int
+      # Arg.default 4
 
 main :: Effect Unit
 main = launchAff_ do
@@ -107,34 +117,11 @@ main = launchAff_ do
       case cmd of
         GenerateOperators globs ->
           generateOperatorsCommand globs
+
         FormatInPlace options numThreads globs -> do
           operators <- readOperatorTable options.operators
-          paths <- expandGlobsWithStatsCwd globs
-          let
-            files :: Array String
-            files =
-              paths
-                # Map.filter Stats.isFile
-                # Map.keys
-                # Set.toUnfoldable
-
-            workerConfig :: WorkerConfig
-            workerConfig =
-              { indent: options.indent
-              , operators
-              , ribbon: options.ribbon
-              , typeArrowPlacement:
-                  case options.typeArrowPlacement of
-                    TypeArrowFirst -> "arrow-first"
-                    TypeArrowLast -> "arrow-last"
-              , unicode:
-                  case options.unicode of
-                    UnicodeSource -> "source"
-                    UnicodeAlways -> "always"
-                    UnicodeNever -> "never"
-              , width: options.width
-              }
-
+          let workerConfig = makeWorkerConfig options operators
+          files <- readFilesFromGlobs globs
           results <- poolTraverse formatWorker workerConfig numThreads files
           for_ results \{ filePath, error } ->
             unless (String.null error) do
@@ -149,6 +136,67 @@ main = launchAff_ do
               liftEffect $ Process.exit 1
             Right str ->
               Console.log str
+
+        Check options numThreads globs -> do
+          operators <- readOperatorTable options.operators
+          files <- readFilesFromGlobs globs
+          let workerConfig = makeWorkerConfig options operators
+          results <- poolTraverse checkWorker workerConfig numThreads files
+          let { errors, unformatted } = partitionCheckedFiles results
+          if Array.null errors && Array.null unformatted then liftEffect do
+            Console.log "All files are formatted."
+            Process.exit 0
+          else liftEffect do
+            unless (Array.null errors) do
+              Console.log "Some files have errors:\n"
+              for_ errors \(Tuple filePath error) ->
+                Console.error $ filePath <> ":\n  " <> error <> "\n"
+            unless (Array.null unformatted) do
+              Console.log "Some files are not formatted:\n"
+              for_ unformatted \filePath ->
+                Console.error $ "  " <> filePath
+            Process.exit 1
+  where
+  readFilesFromGlobs globs = do
+    paths <- expandGlobsWithStatsCwd globs
+    let files = paths # Map.filter Stats.isFile # Map.keys # Set.toUnfoldable
+    pure files
+
+  partitionCheckedFiles
+    :: Array { error :: String, filePath :: String, formatted :: Boolean }
+    -> { errors :: Array (Tuple FilePath String), unformatted :: Array FilePath }
+  partitionCheckedFiles = do
+    let
+      foldFn { errors, unformatted } result = do
+        let
+          errors' =
+            if String.null result.error then errors
+            else Array.cons (Tuple result.filePath result.error) errors
+
+          unformatted' =
+            if result.formatted then unformatted
+            else Array.cons result.filePath unformatted
+
+        { errors: errors', unformatted: unformatted' }
+
+    foldl foldFn mempty
+
+  makeWorkerConfig :: FormatOptions -> Array String -> WorkerConfig
+  makeWorkerConfig options operators =
+    { indent: options.indent
+    , operators
+    , ribbon: options.ribbon
+    , typeArrowPlacement:
+        case options.typeArrowPlacement of
+          TypeArrowFirst -> "arrow-first"
+          TypeArrowLast -> "arrow-last"
+    , unicode:
+        case options.unicode of
+          UnicodeSource -> "source"
+          UnicodeAlways -> "always"
+          UnicodeNever -> "never"
+    , width: options.width
+    }
 
 readOperatorTable :: Maybe FilePath -> Aff (Array String)
 readOperatorTable = case _ of
@@ -198,6 +246,25 @@ type WorkerConfig =
   , width :: Int
   }
 
+workerFormatOptions :: WorkerConfig -> FormatOptions
+workerFormatOptions workerData =
+  { indent: workerData.indent
+  , operators: Nothing
+  , ribbon: workerData.ribbon
+  , typeArrowPlacement:
+      case workerData.typeArrowPlacement of
+        "arrow-first" -> TypeArrowFirst
+        "arrow-last" -> TypeArrowLast
+        _ -> unsafeCrashWith "Unknown typeArrowPlacement"
+  , unicode:
+      case workerData.unicode of
+        "source" -> UnicodeSource
+        "always" -> UnicodeAlways
+        "never" -> UnicodeNever
+        _ -> unsafeCrashWith "Unknown unicode"
+  , width: workerData.width
+  }
+
 formatWorker :: Worker WorkerConfig FilePath { filePath :: FilePath, error :: String }
 formatWorker = Worker.make \{ receive, reply, workerData } -> do
   let
@@ -205,22 +272,7 @@ formatWorker = Worker.make \{ receive, reply, workerData } -> do
       parseOperatorTable workerData.operators
 
     formatOptions =
-      { indent: workerData.indent
-      , operators: Nothing
-      , ribbon: workerData.ribbon
-      , typeArrowPlacement:
-          case workerData.typeArrowPlacement of
-            "arrow-first" -> TypeArrowFirst
-            "arrow-last" -> TypeArrowLast
-            _ -> unsafeCrashWith "Unknown typeArrowPlacement"
-      , unicode:
-          case workerData.unicode of
-            "source" -> UnicodeSource
-            "always" -> UnicodeAlways
-            "never" -> UnicodeNever
-            _ -> unsafeCrashWith "Unknown unicode"
-      , width: workerData.width
-      }
+      workerFormatOptions workerData
 
   receive \filePath -> do
     contents <- Sync.readTextFile UTF8 filePath
@@ -230,6 +282,24 @@ formatWorker = Worker.make \{ receive, reply, workerData } -> do
         reply { filePath, error: "" }
       Left err ->
         reply { filePath, error: printParseError err }
+
+-- | A worker that checks files to see if they have already been formatted.
+checkWorker :: Worker WorkerConfig FilePath { filePath :: FilePath, formatted :: Boolean, error :: String }
+checkWorker = Worker.make \{ receive, reply, workerData } -> do
+  let
+    operators =
+      parseOperatorTable workerData.operators
+
+    formatOptions =
+      workerFormatOptions workerData
+
+  receive \filePath -> do
+    contents <- Sync.readTextFile UTF8 filePath
+    case formatCommand formatOptions operators contents of
+      Right formatted -> do
+        reply { filePath, formatted: formatted == contents, error: "" }
+      Left err ->
+        reply { filePath, formatted: false, error: printParseError err }
 
 readStdin :: Aff String
 readStdin = makeAff \k -> do
