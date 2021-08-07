@@ -6,6 +6,7 @@
   , "argparse-basic"
   , "arrays"
   , "console"
+  , "control"
   , "dodo-printer"
   , "effect"
   , "either"

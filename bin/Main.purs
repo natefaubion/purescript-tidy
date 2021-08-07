@@ -161,7 +161,7 @@ main = launchAff_ do
 
           operatorsByPath <-
             filesWithOptions
-              # map _.config.operators
+              # map _.config.operatorsFile
               # Array.nub
               # parTraverse (\path -> Tuple path <$> readOperatorTable path)
               # map Object.fromFoldable
@@ -174,7 +174,7 @@ main = launchAff_ do
         Format cliOptions -> do
           Tuple rcOptions _ <- resolveRcForDir Map.empty =<< liftEffect cwd
           let options = fromMaybe cliOptions rcOptions
-          operators <- parseOperatorTable <<< fromMaybe defaultOperators <$> traverse readOperatorTable options.operators
+          operators <- parseOperatorTable <<< fromMaybe defaultOperators <$> traverse readOperatorTable options.operatorsFile
           contents <- readStdin
           case formatCommand options operators contents of
             Left err -> do
@@ -221,7 +221,7 @@ formatCommand args operators contents = do
 
 type WorkerConfig =
   { indent :: Int
-  , operators :: String
+  , operatorsFile :: String
   , ribbon :: Number
   , typeArrowPlacement :: String
   , unicode :: String
@@ -231,7 +231,7 @@ type WorkerConfig =
 toWorkerConfig :: FormatOptions -> WorkerConfig
 toWorkerConfig options =
   { indent: options.indent
-  , operators: fromMaybe ".tidyoperators.default" options.operators
+  , operatorsFile: fromMaybe ".tidyoperators.default" options.operatorsFile
   , ribbon: options.ribbon
   , typeArrowPlacement: FormatOptions.typeArrowPlacementToString options.typeArrowPlacement
   , unicode: FormatOptions.unicodeToString options.unicode
@@ -249,12 +249,12 @@ formatWorker = Worker.make \{ receive, reply, workerData: operatorsByPath } -> d
     let
       operators :: PrecedenceMap
       operators =
-        maybe Map.empty Lazy.force $ Object.lookup config.operators parsedOperatorsByPath
+        maybe Map.empty Lazy.force $ Object.lookup config.operatorsFile parsedOperatorsByPath
 
       formatOptions :: FormatOptions
       formatOptions =
         { indent: config.indent
-        , operators: Nothing
+        , operatorsFile: Nothing
         , ribbon: config.ribbon
         , typeArrowPlacement:
             fromRight' (\_ -> unsafeCrashWith "Unknown typeArrowPlacement value") do
@@ -298,7 +298,7 @@ resolveRcForDir = go List.Nil
             Right options -> do
               let
                 resolvedOptions =
-                  options { operators = Path.relative dir <$> options.operators }
+                  options { operatorsFile = Path.relative dir <$> options.operatorsFile }
               pure $ unwind cache (Just resolvedOptions) (List.Cons dir paths)
 
   unwind :: RcMap -> Maybe FormatOptions -> List FilePath -> Tuple (Maybe FormatOptions) RcMap
