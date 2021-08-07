@@ -5,6 +5,7 @@ import Prelude
 import ArgParse.Basic (ArgParser)
 import ArgParse.Basic as Arg
 import Bin.FormatOptions (FormatOptions, formatOptions)
+import Bin.Version (version)
 import Control.Parallel (parTraverse)
 import Data.Array as Array
 import Data.Either (Either(..))
@@ -79,7 +80,7 @@ parser =
           Format <$> formatOptions
             <* Arg.flagHelp
     ]
-    <* Arg.flagInfo [ "--version", "-v" ] "Shows the current version." "v0.1.1"
+    <* Arg.flagInfo [ "--version", "-v" ] "Shows the current version." version
     <* Arg.flagHelp
   where
   pursGlobs =
