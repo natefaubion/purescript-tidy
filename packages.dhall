@@ -62,7 +62,7 @@ let additions =
           , "variant"
           ]
         , repo = "https://github.com/natefaubion/purescript-node-workerbees.git"
-        , version = "v0.1.1"
+        , version = "v0.1.2"
         }
       , argparse-basic =
         { dependencies =
