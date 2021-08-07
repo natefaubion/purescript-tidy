@@ -153,7 +153,7 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
     [ anchor (formatToken conf header.keyword) `space` indent do
         anchor (formatName conf header.name)
           `flexSpaceBreak`
-            anchor (foldMap (formatParenListNonEmpty formatExport conf) header.exports)
+            anchor (foldMap (formatParenListNonEmpty NotGrouped formatExport conf) header.exports)
           `space`
             anchor (formatToken conf header."where")
     , joinWithMap break (formatImportDecl conf) header.imports
@@ -185,7 +185,7 @@ formatDataMembers conf = case _ of
   DataAll t ->
     formatToken conf t
   DataEnumerated ms ->
-    formatParenList formatName conf ms
+    formatParenList NotGrouped formatName conf ms
 
 formatImportDecl :: forall e a. Format (ImportDecl e) e a
 formatImportDecl conf (ImportDecl imp) =
@@ -195,11 +195,11 @@ formatImportDecl conf (ImportDecl imp) =
     Just (Tuple (Just hiding) nameList) ->
       formatName conf imp."module"
         `space` anchor (formatToken conf hiding)
-        `flexSpaceBreak` anchor (formatParenListNonEmpty formatImport conf nameList)
+        `flexSpaceBreak` anchor (formatParenListNonEmpty NotGrouped formatImport conf nameList)
         `space` anchor (foldMap formatImportQualified imp.qualified)
     Just (Tuple Nothing nameList) ->
       formatName conf imp."module"
-        `flexSpaceBreak` anchor (formatParenListNonEmpty formatImport conf nameList)
+        `flexSpaceBreak` anchor (formatParenListNonEmpty NotGrouped formatImport conf nameList)
         `space` anchor (foldMap formatImportQualified imp.qualified)
     Nothing ->
       formatName conf imp."module"
@@ -427,7 +427,7 @@ formatFundep conf = case _ of
 formatOneOrDelimited :: forall b e a. Format b e a -> Format (OneOrDelimited b) e a
 formatOneOrDelimited format conf = case _ of
   One a -> format conf a
-  Many as -> formatParenListNonEmpty format conf as
+  Many as -> formatParenListNonEmpty NotGrouped format conf as
 
 formatInstance :: forall e a. Format (Instance e) e a
 formatInstance conf (Instance { head, body }) = case body of
@@ -633,7 +633,7 @@ formatRow openSpace closeSpace conf (Wrapped { open, value: Row { labels, tail }
   Nothing, Nothing ->
     formatEmptyList conf { open, close }
   Just value, Nothing ->
-    formatDelimitedNonEmpty openSpace closeSpace 2 formatRowLabeled conf (Wrapped { open, value, close })
+    formatDelimitedNonEmpty openSpace closeSpace 2 Grouped formatRowLabeled conf (Wrapped { open, value, close })
   Nothing, Just (Tuple bar ty) ->
     formatToken conf open
       `openSpace`
@@ -684,9 +684,9 @@ formatHangingExpr conf = case _ of
   ExprNumber t _ ->
     hangBreak $ formatToken conf t
   ExprArray exprs ->
-    hangBreak $ formatBasicList formatExpr conf exprs
+    hangBreak $ formatBasicList Grouped formatExpr conf exprs
   ExprRecord fields ->
-    hangBreak $ formatBasicList (formatRecordLabeled formatHangingExpr) conf fields
+    hangBreak $ formatBasicList Grouped (formatRecordLabeled formatHangingExpr) conf fields
   ExprParens expr ->
     hangBreak $ formatParensBlock formatExpr conf expr
   ExprTyped expr separator ty ->
@@ -716,7 +716,7 @@ formatHangingExpr conf = case _ of
   ExprRecordUpdate expr upd ->
     hang
       (formatExpr conf expr)
-      (hangBreak (formatBasicListNonEmpty formatRecordUpdate conf upd))
+      (hangBreak (formatBasicListNonEmpty Grouped formatRecordUpdate conf upd))
 
   ExprApp expr exprs ->
     hangApp
@@ -821,7 +821,7 @@ formatRecordUpdate conf = case _ of
     declareHanging (formatName conf n) space (formatToken conf t) (formatHangingExpr conf expr)
   RecordUpdateBranch n upd ->
     formatName conf n `flexSpaceBreak` indent do
-      formatBasicListNonEmpty formatRecordUpdate conf upd
+      formatBasicListNonEmpty Grouped formatRecordUpdate conf upd
 
 formatCaseBranch :: forall e a. Format (Tuple (Separated (Binder e)) (Guarded e)) e a
 formatCaseBranch conf (Tuple (Separated { head, tail }) guarded) =
@@ -968,11 +968,11 @@ formatHangingBinder conf = case _ of
   BinderNumber neg t _ ->
     hangBreak $ foldMap (formatToken conf) neg <> formatToken conf t
   BinderArray binders ->
-    hangBreak $ formatBasicList formatBinder conf binders
+    hangBreak $ formatBasicList Grouped formatBinder conf binders
   BinderRecord binders ->
-    hangBreak $ formatBasicList (formatRecordLabeled formatHangingBinder) conf binders
+    hangBreak $ formatBasicList Grouped (formatRecordLabeled formatHangingBinder) conf binders
   BinderParens binder ->
-    hangBreak $ formatParens formatBinder conf binder
+    hangBreak $ formatParensBlock formatBinder conf binder
   BinderTyped binder separator ty ->
     hangBreak $ formatSignature conf $ Labeled
       { label: formatBinder conf binder
@@ -1010,32 +1010,32 @@ formatParens format conf (Wrapped { open, value, close }) =
 
 formatParensBlock :: forall e a b. Format b e a -> Format (Wrapped b) e a
 formatParensBlock format conf (Wrapped { open, value, close }) =
-  flexGroup $ formatToken conf open
-    `softSpace` align 2 (anchor (format conf value))
-    `softBreak` formatToken conf close
+  commentedFlexGroup open softSpace conf do
+    align 2 (anchor (format conf value))
+      `softBreak` formatToken conf close
 
-formatBasicList :: forall e a b. Format b e a -> Format (Delimited b) e a
+formatBasicList :: forall e a b. FormatGrouped -> Format b e a -> Format (Delimited b) e a
 formatBasicList = formatDelimited space spaceBreak 2
 
-formatBasicListNonEmpty :: forall e a b. Format b e a -> Format (DelimitedNonEmpty b) e a
+formatBasicListNonEmpty :: forall e a b. FormatGrouped -> Format b e a -> Format (DelimitedNonEmpty b) e a
 formatBasicListNonEmpty = formatDelimitedNonEmpty space spaceBreak 2
 
-formatParenList :: forall e a b. Format b e a -> Format (Delimited b) e a
+formatParenList :: forall e a b. FormatGrouped -> Format b e a -> Format (Delimited b) e a
 formatParenList = formatDelimited softSpace softBreak 2
 
-formatParenListNonEmpty :: forall e a b. Format b e a -> Format (DelimitedNonEmpty b) e a
+formatParenListNonEmpty :: forall e a b. FormatGrouped -> Format b e a -> Format (DelimitedNonEmpty b) e a
 formatParenListNonEmpty = formatDelimitedNonEmpty softSpace softBreak 2
 
-formatDelimited :: forall e a b. FormatSpace a -> FormatSpace a -> Int -> Format b e a -> Format (Delimited b) e a
-formatDelimited openSpace closeSpace alignment format conf (Wrapped { open, value, close }) = case value of
+formatDelimited :: forall e a b. FormatSpace a -> FormatSpace a -> Int -> FormatGrouped -> Format b e a -> Format (Delimited b) e a
+formatDelimited openSpace closeSpace alignment grouped format conf (Wrapped { open, value, close }) = case value of
   Nothing ->
     formatEmptyList conf { open, close }
   Just (Separated { head, tail }) ->
-    formatList openSpace closeSpace alignment format conf { open, head, tail, close }
+    formatList openSpace closeSpace alignment grouped format conf { open, head, tail, close }
 
-formatDelimitedNonEmpty :: forall e a b. FormatSpace a -> FormatSpace a -> Int -> Format b e a -> Format (DelimitedNonEmpty b) e a
-formatDelimitedNonEmpty openSpace closeSpace alignment format conf (Wrapped { open, value: Separated { head, tail }, close }) =
-  formatList openSpace closeSpace alignment format conf { open, head, tail, close }
+formatDelimitedNonEmpty :: forall e a b. FormatSpace a -> FormatSpace a -> Int -> FormatGrouped -> Format b e a -> Format (DelimitedNonEmpty b) e a
+formatDelimitedNonEmpty openSpace closeSpace alignment grouped format conf (Wrapped { open, value: Separated { head, tail }, close }) =
+  formatList openSpace closeSpace alignment grouped format conf { open, head, tail, close }
 
 formatEmptyList :: forall e a. Format { open :: SourceToken, close :: SourceToken } e a
 formatEmptyList conf { open, close } = formatToken conf open <> formatToken conf close
@@ -1047,15 +1047,23 @@ type FormatList b =
   , close :: SourceToken
   }
 
-formatList :: forall e a b. FormatSpace a -> FormatSpace a -> Int -> Format b e a -> Format (FormatList b) e a
-formatList openSpace closeSpace alignment format conf { open, head, tail, close } =
-  formatToken conf open
-    `openSpace`
-      formatListElem alignment format conf head
-    `softBreak`
-      formatListTail alignment format conf tail
-    `closeSpace`
-      formatToken conf close
+data FormatGrouped = Grouped | NotGrouped
+
+formatList :: forall e a b. FormatSpace a -> FormatSpace a -> Int -> FormatGrouped -> Format b e a -> Format (FormatList b) e a
+formatList openSpace closeSpace alignment grouped format conf { open, head, tail, close } =
+  case grouped of
+    Grouped ->
+      commentedFlexGroup open openSpace conf listElems
+    NotGrouped ->
+      formatToken conf open
+        `openSpace` listElems
+  where
+  listElems =
+    formatListElem alignment format conf head
+      `softBreak`
+        formatListTail alignment format conf tail
+      `closeSpace`
+        formatToken conf close
 
 formatListElem :: forall e a b. Int -> Format b e a -> Format b e a
 formatListElem alignment format conf b = flexGroup (align alignment (anchor (format conf b)))
@@ -1089,3 +1097,11 @@ toQualifiedOperatorTree precMap opNs =
 
 overLabel :: forall a b c. (a -> b) -> Labeled a c -> Labeled b c
 overLabel k (Labeled lbl) = Labeled lbl { label = k lbl.label }
+
+-- TODO: Properly fix this grouping issue by buffering comments in FormatDoc.
+-- This would let us group the semantic elements of the doc and not the comments.
+commentedFlexGroup :: forall e a. SourceToken -> FormatSpace a -> Format (FormatDoc a) e a
+commentedFlexGroup tok spc conf doc =
+  formatWithComments tok.leadingComments [] $ flexGroup do
+    formatToken conf (tok { leadingComments = [] })
+      `spc` doc
