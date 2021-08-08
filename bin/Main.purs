@@ -22,13 +22,14 @@ import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Monoid (power)
+import Data.Monoid (guard, power)
 import Data.Newtype (unwrap)
 import Data.Set as Set
 import Data.String (Pattern(..))
 import Data.String as String
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..), snd, uncurry)
+import Data.Tuple.Nested ((/\))
 import DefaultOperators (defaultOperators)
 import Dodo as Dodo
 import Effect (Effect)
@@ -170,9 +171,20 @@ main = launchAff_ do
               # parTraverse (\path -> Tuple path <$> readOperatorTable path)
               # map Object.fromFoldable
 
-          let shouldCheck = mode == Check
-          results <- poolTraverse formatWorker { shouldCheck, operatorsByPath } numThreads filesWithOptions
-          let { errors, notFormatted } = partitionCheckedFiles results
+          let
+            workerData =
+              { shouldCheck: mode == Check
+              , operatorsByPath
+              }
+
+          results <- poolTraverse formatWorker workerData numThreads filesWithOptions
+
+          let
+            { errors, notFormatted } =
+              results # foldMap \{ filePath, error, alreadyFormatted } ->
+                { errors: guard (not String.null error) [ filePath /\ error ]
+                , notFormatted: guard (not alreadyFormatted) [ filePath ]
+                }
 
           case mode of
             Write ->
@@ -472,22 +484,3 @@ tokenStreamToArray = go []
       Left err
     TokenCons tok _ next _ ->
       go (Array.snoc acc tok.value) next
-
-partitionCheckedFiles
-  :: Array WorkerOutput
-  -> { errors :: Array (Tuple FilePath String), notFormatted :: Array FilePath }
-partitionCheckedFiles = do
-  let
-    foldFn { errors, notFormatted } result = do
-      let
-        errors'
-          | String.null result.error = errors
-          | otherwise = Array.cons (Tuple result.filePath result.error) errors
-
-        notFormatted'
-          | result.alreadyFormatted = notFormatted
-          | otherwise = Array.cons result.filePath notFormatted
-
-      { errors: errors', notFormatted: notFormatted' }
-
-  foldl foldFn mempty
