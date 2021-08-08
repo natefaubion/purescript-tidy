@@ -67,11 +67,16 @@ import PureScript.CST.Types (Declaration(..), Export(..), FixityOp(..), Module(.
 data FormatMode = Check | Write
 derive instance Eq FormatMode
 
+data ConfigOption
+  = Require
+  | Ignore
+  | Prefer
+
 data Command
   = GenerateOperators (Array String)
   | GenerateRc FormatOptions
-  | FormatInPlace FormatMode FormatOptions Int (Array String)
-  | Format FormatOptions
+  | FormatInPlace FormatMode FormatOptions ConfigOption Int (Array String)
+  | Format FormatOptions ConfigOption
 
 rcFileName :: String
 rcFileName = ".tidyrc.json"
@@ -94,19 +99,23 @@ parser =
         do
           FormatInPlace Write
             <$> formatOptions
+            <*> configOption
             <*> workerOptions
             <*> pursGlobs
             <* Arg.flagHelp
     , Arg.command [ "format" ]
         "Format input over stdin."
         do
-          Format <$> formatOptions
+          Format
+            <$> formatOptions
+            <*> configOption
             <* Arg.flagHelp
     , Arg.command [ "check" ]
         "Check source files are formatted."
         do
           FormatInPlace Check
             <$> formatOptions
+            <*> configOption
             <*> workerOptions
             <*> pursGlobs
             <* Arg.flagHelp
@@ -123,6 +132,20 @@ parser =
       "Number of worker threads to use.\nDefaults to 4."
       # Arg.int
       # Arg.default 4
+
+  configOption =
+    Arg.choose "config behavior"
+      [ Arg.flag [ "--config-prefer", "-cp" ]
+          "Always use config files when present, otherwise use CLI options.\nDefault."
+          $> Prefer
+      , Arg.flag [ "--config-require", "-cr" ]
+          "Require the presence of a config file.\nUseful for editors."
+          $> Require
+      , Arg.flag [ "--config-ignore", "-ci" ]
+          "Ignore all configuration files and only use CLI options.\nNot recommended."
+          $> Ignore
+      ]
+      # Arg.default Prefer
 
 main :: Effect Unit
 main = launchAff_ do
@@ -155,14 +178,17 @@ main = launchAff_ do
             let contents = Json.stringifyWithIndent 2 $ FormatOptions.toJson cliOptions
             FS.writeTextFile UTF8 rcFileName $ contents <> "\n"
 
-        FormatInPlace mode cliOptions numThreads globs -> do
+        FormatInPlace mode cliOptions configOption numThreads globs -> do
           files <- expandGlobs globs
-          filesWithOptions <-
-            flip evalStateT Map.empty do
-              for files \filePath -> do
-                rcMap <- State.get
-                rcOptions <- State.state <<< const =<< lift (resolveRcForDir rcMap (Path.dirname filePath))
-                pure { filePath, config: toWorkerConfig $ fromMaybe cliOptions rcOptions }
+          filesWithOptions <- flip evalStateT Map.empty do
+            for files \filePath -> do
+              rcMap <- State.get
+              rcOptions <- State.state <<< const =<< lift (resolveRcForDir rcMap (Path.dirname filePath))
+              options <- lift $ getOptions cliOptions rcOptions filePath configOption
+              pure
+                { filePath
+                , config: toWorkerConfig options
+                }
 
           operatorsByPath <-
             filesWithOptions
@@ -205,9 +231,9 @@ main = launchAff_ do
                   for_ notFormatted Console.error
                 Process.exit 1
 
-        Format cliOptions -> do
+        Format cliOptions configOption -> do
           Tuple rcOptions _ <- resolveRcForDir Map.empty =<< liftEffect cwd
-          let options = fromMaybe cliOptions rcOptions
+          options <- getOptions cliOptions rcOptions "the current directory." configOption
           operators <- parseOperatorTable <<< fromMaybe defaultOperators <$> traverse readOperatorTable options.operatorsFile
           contents <- readStdin
           case formatCommand options operators contents of
@@ -232,6 +258,18 @@ expandGlobs = map dirToGlob >>> expandGlobsWithStatsCwd >>> map onlyFiles
     Map.filter Stats.isFile
       >>> Map.keys
       >>> Set.toUnfoldable
+
+getOptions :: FormatOptions -> Maybe FormatOptions -> FilePath -> ConfigOption -> Aff FormatOptions
+getOptions cliOptions rcOptions filePath = case _ of
+  Prefer -> pure $ fromMaybe cliOptions rcOptions
+  Ignore -> pure cliOptions
+  Require ->
+    case rcOptions of
+      Nothing -> do
+        Console.error $ rcFileName <> " not found for " <> filePath
+        liftEffect $ Process.exit 1
+      Just options ->
+        pure options
 
 readOperatorTable :: FilePath -> Aff (Array String)
 readOperatorTable path
