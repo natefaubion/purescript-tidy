@@ -45,7 +45,7 @@ let additions =
           , "strings"
           ]
         , repo = "https://github.com/natefaubion/purescript-node-glob-basic.git"
-        , version = "v1.1.0"
+        , version = "v1.2.0"
         }
       , node-workerbees =
         { dependencies =
