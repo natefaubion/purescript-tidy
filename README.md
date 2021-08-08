@@ -31,7 +31,7 @@ $ purs-tidy format-in-place --help
 Some common options include:
 
 * `--indent` to set the number of spaces used in indentation, which defaults to 2 spaces
-* `--arrow-first` or `--arrow-last` to control whether type signatures put arrows first on the line or last on the line (purty-style), which defaults to arrow-last.
+* `--arrow-first` or `--arrow-last` to control whether type signatures put arrows first on the line or last on the line (purty-style), which defaults to arrow-first.
 
 You can generate a `.tidyrc.json` using the `generate-config` command. If a `.tidyrc.json` file is found, it will be used in lieu of CLI arguments.
 
