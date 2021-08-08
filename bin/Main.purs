@@ -143,15 +143,7 @@ main = launchAff_ do
             FS.writeTextFile UTF8 rcFileName $ contents <> "\n"
 
         FormatInPlace cliOptions numThreads globs -> do
-          paths <- expandGlobsWithStatsCwd globs
-          let
-            files :: Array String
-            files =
-              paths
-                # Map.filter Stats.isFile
-                # Map.keys
-                # Set.toUnfoldable
-
+          files <- expandGlobs globs
           filesWithOptions <-
             flip evalStateT Map.empty do
               for files \filePath -> do
@@ -184,6 +176,20 @@ main = launchAff_ do
               makeAff \k -> do
                 _ <- Stream.writeString Process.stdout UTF8 str (k (Right unit))
                 pure mempty
+
+expandGlobs :: Array String -> Aff (Array String)
+expandGlobs = map dirToGlob >>> expandGlobsWithStatsCwd >>> map onlyFiles
+  where
+  dirToGlob path =
+    if Path.extname path == "" then
+      Path.concat [ path, "**", "*.purs" ]
+    else
+      path
+
+  onlyFiles =
+    Map.filter Stats.isFile
+      >>> Map.keys
+      >>> Set.toUnfoldable
 
 readOperatorTable :: FilePath -> Aff (Array String)
 readOperatorTable path
