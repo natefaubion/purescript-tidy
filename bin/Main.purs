@@ -64,7 +64,6 @@ import PureScript.CST.TokenStream as TokenStream
 import PureScript.CST.Types (Declaration(..), Export(..), FixityOp(..), Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), Operator(..), Separated(..), Token(..), Wrapped(..))
 
 data FormatMode = Check | Write
-
 derive instance Eq FormatMode
 
 data Command
@@ -171,8 +170,9 @@ main = launchAff_ do
               # parTraverse (\path -> Tuple path <$> readOperatorTable path)
               # map Object.fromFoldable
 
-          results <- poolTraverse (formatWorker mode) operatorsByPath numThreads filesWithOptions
-          let { errors, unformatted } = partitionCheckedFiles results
+          let shouldCheck = mode == Check
+          results <- poolTraverse formatWorker { shouldCheck, operatorsByPath } numThreads filesWithOptions
+          let { errors, notFormatted } = partitionCheckedFiles results
 
           case mode of
             Write ->
@@ -180,7 +180,7 @@ main = launchAff_ do
                 Console.error $ filePath <> ":\n  " <> error <> "\n"
 
             Check -> liftEffect do
-              if Array.null errors && Array.null unformatted then do
+              if Array.null errors && Array.null notFormatted then do
                 Console.log "All files are formatted."
                 Process.exit 0
               else do
@@ -188,9 +188,9 @@ main = launchAff_ do
                   Console.log "Some files have errors:\n"
                   for_ errors \(Tuple filePath error) ->
                     Console.error $ filePath <> ":\n  " <> error <> "\n"
-                unless (Array.null unformatted) do
+                unless (Array.null notFormatted) do
                   Console.log "Some files are not formatted:\n"
-                  for_ unformatted Console.error
+                  for_ notFormatted Console.error
                 Process.exit 1
 
         Format cliOptions -> do
@@ -276,6 +276,11 @@ toWorkerConfig options =
   , width: fromMaybe top options.width
   }
 
+type WorkerData =
+  { shouldCheck :: Boolean
+  , operatorsByPath :: Object (Array String)
+  }
+
 type WorkerInput =
   { filePath :: FilePath
   , config :: WorkerConfig
@@ -287,10 +292,8 @@ type WorkerOutput =
   , alreadyFormatted :: Boolean
   }
 
-formatWorker
-  :: FormatMode
-  -> Worker (Object (Array String)) WorkerInput WorkerOutput
-formatWorker mode = Worker.make \{ receive, reply, workerData: operatorsByPath } -> do
+formatWorker :: Worker WorkerData WorkerInput WorkerOutput
+formatWorker = Worker.make \{ receive, reply, workerData: { shouldCheck, operatorsByPath } } -> do
   let
     parsedOperatorsByPath :: Object (Lazy PrecedenceMap)
     parsedOperatorsByPath =
@@ -318,13 +321,13 @@ formatWorker mode = Worker.make \{ receive, reply, workerData: operatorsByPath }
 
     contents <- Sync.readTextFile UTF8 filePath
     case formatCommand formatOptions operators contents of
-      Right formatted -> case mode of
-        Write -> do
-          Sync.writeTextFile UTF8 filePath formatted
-          reply { filePath, error: "", alreadyFormatted: false }
-        Check -> do
+      Right formatted ->
+        if shouldCheck then do
           let alreadyFormatted = formatted == contents
           reply { filePath, error: "", alreadyFormatted }
+        else do
+          Sync.writeTextFile UTF8 filePath formatted
+          reply { filePath, error: "", alreadyFormatted: false }
       Left err ->
         reply { filePath, error: printParseError err, alreadyFormatted: false }
 
@@ -472,19 +475,19 @@ tokenStreamToArray = go []
 
 partitionCheckedFiles
   :: Array WorkerOutput
-  -> { errors :: Array (Tuple FilePath String), unformatted :: Array FilePath }
+  -> { errors :: Array (Tuple FilePath String), notFormatted :: Array FilePath }
 partitionCheckedFiles = do
   let
-    foldFn { errors, unformatted } result = do
+    foldFn { errors, notFormatted } result = do
       let
         errors'
           | String.null result.error = errors
           | otherwise = Array.cons (Tuple result.filePath result.error) errors
 
-        unformatted'
-          | not result.alreadyFormatted = unformatted
-          | otherwise = Array.cons result.filePath unformatted
+        notFormatted'
+          | not result.alreadyFormatted = notFormatted
+          | otherwise = Array.cons result.filePath notFormatted
 
-      { errors: errors', unformatted: unformatted' }
+      { errors: errors', notFormatted: notFormatted' }
 
   foldl foldFn mempty
