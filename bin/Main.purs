@@ -485,7 +485,7 @@ partitionCheckedFiles = do
           | otherwise = Array.cons (Tuple result.filePath result.error) errors
 
         notFormatted'
-          | not result.alreadyFormatted = notFormatted
+          | result.alreadyFormatted = notFormatted
           | otherwise = Array.cons result.filePath notFormatted
 
       { errors: errors', notFormatted: notFormatted' }
