@@ -16,8 +16,8 @@
     "build": "spago -x bin/spago.dhall build",
     "test": "spago -x test/spago.dhall test",
     "generate-default-operators": "spago -x script/spago.dhall run -m GenerateDefaultOperatorsModule",
-    "format-self": "npm run build && node ./bin/index.js format-in-place src test/Test bin script",
-    "check-self": "node ./bin/index.js check src test/Test bin script",
+    "format-self": "npm run build && node ./bin/index.js format-in-place src 'test/*.purs' bin script",
+    "check-self": "node ./bin/index.js check src 'test/*.purs' bin script",
     "prepublishOnly": "rm -rf output && npm run build"
   },
   "repository": {
