@@ -63,10 +63,14 @@ import PureScript.CST.TokenStream (TokenStep(..), TokenStream)
 import PureScript.CST.TokenStream as TokenStream
 import PureScript.CST.Types (Declaration(..), Export(..), FixityOp(..), Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), Operator(..), Separated(..), Token(..), Wrapped(..))
 
+data FormatMode = Check | Write
+
+derive instance Eq FormatMode
+
 data Command
   = GenerateOperators (Array String)
   | GenerateRc FormatOptions
-  | FormatInPlace FormatOptions Int (Array String)
+  | FormatInPlace FormatMode FormatOptions Int (Array String)
   | Format FormatOptions
 
 rcFileName :: String
@@ -88,20 +92,23 @@ parser =
     , Arg.command [ "format-in-place" ]
         "Format source files in place."
         do
-          FormatInPlace
+          FormatInPlace Write
             <$> formatOptions
-            <*>
-              do
-                Arg.argument [ "--threads", "-t" ]
-                  "Number of worker threads to use.\nDefaults to 4."
-                  # Arg.int
-                  # Arg.default 4
+            <*> workerOptions
             <*> pursGlobs
             <* Arg.flagHelp
     , Arg.command [ "format" ]
         "Format input over stdin."
         do
           Format <$> formatOptions
+            <* Arg.flagHelp
+    , Arg.command [ "check" ]
+        "Check source files are formatted."
+        do
+          FormatInPlace Check
+            <$> formatOptions
+            <*> workerOptions
+            <*> pursGlobs
             <* Arg.flagHelp
     ]
     <* Arg.flagInfo [ "--version", "-v" ] "Shows the current version." version
@@ -110,6 +117,12 @@ parser =
   pursGlobs =
     Arg.anyNotFlag "PURS_GLOB" "Globs for PureScript sources."
       # Arg.unfolded1
+
+  workerOptions =
+    Arg.argument [ "--threads", "-t" ]
+      "Number of worker threads to use.\nDefaults to 4."
+      # Arg.int
+      # Arg.default 4
 
 main :: Effect Unit
 main = launchAff_ do
@@ -158,10 +171,28 @@ main = launchAff_ do
               # parTraverse (\path -> Tuple path <$> readOperatorTable path)
               # map Object.fromFoldable
 
-          results <- poolTraverse formatWorker operatorsByPath numThreads filesWithOptions
-          for_ results \{ filePath, error } ->
-            unless (String.null error) do
-              Console.error $ filePath <> ":\n  " <> error <> "\n"
+          results <- poolTraverse (formatWorker mode) operatorsByPath numThreads filesWithOptions
+
+          case mode of
+            Write ->
+              for_ results \{ filePath, error } ->
+                unless (String.null error) do
+                  Console.error $ filePath <> ":\n  " <> error <> "\n"
+
+            Check -> do
+              let { errors, unformatted } = partitionCheckedFiles results
+              if Array.null errors && Array.null unformatted then liftEffect do
+                Console.log "All files are formatted."
+                Process.exit 0
+              else liftEffect do
+                unless (Array.null errors) do
+                  Console.log "Some files have errors:\n"
+                  for_ errors \(Tuple filePath error) ->
+                    Console.error $ filePath <> ":\n  " <> error <> "\n"
+                unless (Array.null unformatted) do
+                  Console.log "Some files are not formatted:\n"
+                  for_ unformatted Console.error
+                Process.exit 1
 
         Format cliOptions -> do
           Tuple rcOptions _ <- resolveRcForDir Map.empty =<< liftEffect cwd
@@ -246,8 +277,21 @@ toWorkerConfig options =
   , width: fromMaybe top options.width
   }
 
-formatWorker :: Worker (Object (Array String)) { filePath :: FilePath, config :: WorkerConfig } { filePath :: FilePath, error :: String }
-formatWorker = Worker.make \{ receive, reply, workerData: operatorsByPath } -> do
+type WorkerInput =
+  { filePath :: FilePath
+  , config :: WorkerConfig
+  }
+
+type WorkerOutput =
+  { filePath :: FilePath
+  , error :: String
+  , alreadyFormatted :: Boolean
+  }
+
+formatWorker
+  :: FormatMode
+  -> Worker (Object (Array String)) WorkerInput WorkerOutput
+formatWorker mode = Worker.make \{ receive, reply, workerData: operatorsByPath } -> do
   let
     parsedOperatorsByPath :: Object (Lazy PrecedenceMap)
     parsedOperatorsByPath =
@@ -275,11 +319,15 @@ formatWorker = Worker.make \{ receive, reply, workerData: operatorsByPath } -> d
 
     contents <- Sync.readTextFile UTF8 filePath
     case formatCommand formatOptions operators contents of
-      Right formatted -> do
-        Sync.writeTextFile UTF8 filePath formatted
-        reply { filePath, error: "" }
+      Right formatted -> case mode of
+        Write -> do
+          Sync.writeTextFile UTF8 filePath formatted
+          reply { filePath, error: "", alreadyFormatted: false }
+        Check -> do
+          let alreadyFormatted = formatted == contents
+          reply { filePath, error: "", alreadyFormatted }
       Left err ->
-        reply { filePath, error: printParseError err }
+        reply { filePath, error: printParseError err, alreadyFormatted: false }
 
 type RcMap = Map FilePath (Maybe FormatOptions)
 
@@ -422,3 +470,20 @@ tokenStreamToArray = go []
       Left err
     TokenCons tok _ next _ ->
       go (Array.snoc acc tok.value) next
+
+partitionCheckedFiles :: Array WorkerOutput -> { errors :: Array (Tuple FilePath String), unformatted :: Array FilePath }
+partitionCheckedFiles = do
+  let
+    foldFn { errors, unformatted } result = do
+      let
+        errors'
+          | String.null result.error = errors
+          | otherwise = Array.cons (Tuple result.filePath result.error) errors
+
+        unformatted'
+          | not result.alreadyFormatted = unformatted
+          | otherwise = Array.cons result.filePath unformatted
+
+      { errors: errors', unformatted: unformatted' }
+
+  foldl foldFn mempty
