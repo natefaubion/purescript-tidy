@@ -22,13 +22,14 @@ import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Monoid (power)
+import Data.Monoid (guard, power)
 import Data.Newtype (unwrap)
 import Data.Set as Set
 import Data.String (Pattern(..))
 import Data.String as String
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..), snd, uncurry)
+import Data.Tuple.Nested ((/\))
 import DefaultOperators (defaultOperators)
 import Dodo as Dodo
 import Effect (Effect)
@@ -63,6 +64,9 @@ import PureScript.CST.TokenStream (TokenStep(..), TokenStream)
 import PureScript.CST.TokenStream as TokenStream
 import PureScript.CST.Types (Declaration(..), Export(..), FixityOp(..), Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), Operator(..), Separated(..), Token(..), Wrapped(..))
 
+data FormatMode = Check | Write
+derive instance Eq FormatMode
+
 data ConfigOption
   = Require
   | Ignore
@@ -71,7 +75,7 @@ data ConfigOption
 data Command
   = GenerateOperators (Array String)
   | GenerateRc FormatOptions
-  | FormatInPlace FormatOptions ConfigOption Int (Array String)
+  | FormatInPlace FormatMode FormatOptions ConfigOption Int (Array String)
   | Format FormatOptions ConfigOption
 
 rcFileName :: String
@@ -93,15 +97,10 @@ parser =
     , Arg.command [ "format-in-place" ]
         "Format source files in place."
         do
-          FormatInPlace
+          FormatInPlace Write
             <$> formatOptions
             <*> configOption
-            <*>
-              do
-                Arg.argument [ "--threads", "-t" ]
-                  "Number of worker threads to use.\nDefaults to 4."
-                  # Arg.int
-                  # Arg.default 4
+            <*> workerOptions
             <*> pursGlobs
             <* Arg.flagHelp
     , Arg.command [ "format" ]
@@ -111,6 +110,15 @@ parser =
             <$> formatOptions
             <*> configOption
             <* Arg.flagHelp
+    , Arg.command [ "check" ]
+        "Check source files are formatted."
+        do
+          FormatInPlace Check
+            <$> formatOptions
+            <*> configOption
+            <*> workerOptions
+            <*> pursGlobs
+            <* Arg.flagHelp
     ]
     <* Arg.flagInfo [ "--version", "-v" ] "Shows the current version." version
     <* Arg.flagHelp
@@ -118,6 +126,12 @@ parser =
   pursGlobs =
     Arg.anyNotFlag "PURS_GLOB" "Globs for PureScript sources."
       # Arg.unfolded1
+
+  workerOptions =
+    Arg.argument [ "--threads", "-t" ]
+      "Number of worker threads to use.\nDefaults to 4."
+      # Arg.int
+      # Arg.default 4
 
   configOption =
     Arg.choose "config behavior"
@@ -164,7 +178,7 @@ main = launchAff_ do
             let contents = Json.stringifyWithIndent 2 $ FormatOptions.toJson cliOptions
             FS.writeTextFile UTF8 rcFileName $ contents <> "\n"
 
-        FormatInPlace cliOptions configOption numThreads globs -> do
+        FormatInPlace mode cliOptions configOption numThreads globs -> do
           files <- expandGlobs globs
           filesWithOptions <- flip evalStateT Map.empty do
             for files \filePath -> do
@@ -183,10 +197,39 @@ main = launchAff_ do
               # parTraverse (\path -> Tuple path <$> readOperatorTable path)
               # map Object.fromFoldable
 
-          results <- poolTraverse formatWorker operatorsByPath numThreads filesWithOptions
-          for_ results \{ filePath, error } ->
-            unless (String.null error) do
-              Console.error $ filePath <> ":\n  " <> error <> "\n"
+          let
+            workerData =
+              { shouldCheck: mode == Check
+              , operatorsByPath
+              }
+
+          results <- poolTraverse formatWorker workerData numThreads filesWithOptions
+
+          let
+            { errors, notFormatted } =
+              results # foldMap \{ filePath, error, alreadyFormatted } ->
+                { errors: guard (not String.null error) [ filePath /\ error ]
+                , notFormatted: guard (not alreadyFormatted) [ filePath ]
+                }
+
+          case mode of
+            Write ->
+              for_ errors \(Tuple filePath error) ->
+                Console.error $ filePath <> ":\n  " <> error <> "\n"
+
+            Check -> liftEffect do
+              if Array.null errors && Array.null notFormatted then do
+                Console.log "All files are formatted."
+                Process.exit 0
+              else do
+                unless (Array.null errors) do
+                  Console.log "Some files have errors:\n"
+                  for_ errors \(Tuple filePath error) ->
+                    Console.error $ filePath <> ":\n  " <> error <> "\n"
+                unless (Array.null notFormatted) do
+                  Console.log "Some files are not formatted:\n"
+                  for_ notFormatted Console.error
+                Process.exit 1
 
         Format cliOptions configOption -> do
           Tuple rcOptions _ <- resolveRcForDir Map.empty =<< liftEffect cwd
@@ -283,8 +326,24 @@ toWorkerConfig options =
   , width: fromMaybe top options.width
   }
 
-formatWorker :: Worker (Object (Array String)) { filePath :: FilePath, config :: WorkerConfig } { filePath :: FilePath, error :: String }
-formatWorker = Worker.make \{ receive, reply, workerData: operatorsByPath } -> do
+type WorkerData =
+  { shouldCheck :: Boolean
+  , operatorsByPath :: Object (Array String)
+  }
+
+type WorkerInput =
+  { filePath :: FilePath
+  , config :: WorkerConfig
+  }
+
+type WorkerOutput =
+  { filePath :: FilePath
+  , error :: String
+  , alreadyFormatted :: Boolean
+  }
+
+formatWorker :: Worker WorkerData WorkerInput WorkerOutput
+formatWorker = Worker.make \{ receive, reply, workerData: { shouldCheck, operatorsByPath } } -> do
   let
     parsedOperatorsByPath :: Object (Lazy PrecedenceMap)
     parsedOperatorsByPath =
@@ -312,11 +371,15 @@ formatWorker = Worker.make \{ receive, reply, workerData: operatorsByPath } -> d
 
     contents <- Sync.readTextFile UTF8 filePath
     case formatCommand formatOptions operators contents of
-      Right formatted -> do
-        Sync.writeTextFile UTF8 filePath formatted
-        reply { filePath, error: "" }
+      Right formatted ->
+        if shouldCheck then do
+          let alreadyFormatted = formatted == contents
+          reply { filePath, error: "", alreadyFormatted }
+        else do
+          Sync.writeTextFile UTF8 filePath formatted
+          reply { filePath, error: "", alreadyFormatted: false }
       Left err ->
-        reply { filePath, error: printParseError err }
+        reply { filePath, error: printParseError err, alreadyFormatted: false }
 
 type RcMap = Map FilePath (Maybe FormatOptions)
 
