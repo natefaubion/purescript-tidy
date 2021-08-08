@@ -154,7 +154,7 @@ main = launchAff_ do
             let contents = Json.stringifyWithIndent 2 $ FormatOptions.toJson cliOptions
             FS.writeTextFile UTF8 rcFileName $ contents <> "\n"
 
-        FormatInPlace cliOptions numThreads globs -> do
+        FormatInPlace mode cliOptions numThreads globs -> do
           files <- expandGlobs globs
           filesWithOptions <-
             flip evalStateT Map.empty do
