@@ -38,3 +38,6 @@ jobs:
 
       - name: Run tests
         run: spago --quiet --config test/spago.dhall test
+
+      - name: Verify formatting
+        run: npm run check-self
