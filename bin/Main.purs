@@ -155,8 +155,7 @@ main = launchAff_ do
             FS.writeTextFile UTF8 rcFileName $ contents <> "\n"
 
         FormatInPlace mode cliOptions numThreads globs -> do
-          files <- expandGlobs
-              globs
+          files <- expandGlobs globs
           filesWithOptions <-
             flip evalStateT Map.empty do
               for files \filePath -> do
