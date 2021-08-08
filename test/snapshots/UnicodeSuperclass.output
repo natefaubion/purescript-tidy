@@ -1,0 +1,16 @@
+module UnicodeSuperclass where
+
+class Foo a <= Bar a
+class Foo a ⇐ Bar a
+
+-- @format --unicode-always
+module UnicodeSuperclass where
+
+class Foo a ⇐ Bar a
+class Foo a ⇐ Bar a
+
+-- @format --unicode-never
+module UnicodeSuperclass where
+
+class Foo a <= Bar a
+class Foo a <= Bar a

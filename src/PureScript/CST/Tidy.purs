@@ -412,7 +412,15 @@ formatClassHead conf (Tuple cls wh) =
 formatConstraints :: forall e a. Format (Tuple (OneOrDelimited (Type e)) SourceToken) e a
 formatConstraints conf (Tuple cs arr) =
   formatOneOrDelimited formatType conf cs
-    `space` anchor (formatToken conf arr)
+    `space` anchor (formatToken conf unicodeArr)
+  where
+  unicodeArr = case arr.value of
+    TokOperator Nothing "<=" | conf.unicode == UnicodeAlways ->
+      arr { value = TokOperator Nothing "⇐" }
+    TokOperator Nothing "⇐" | conf.unicode == UnicodeNever ->
+      arr { value = TokOperator Nothing "<=" }
+    _ ->
+      arr
 
 formatFundep :: forall e a. Format ClassFundep e a
 formatFundep conf = case _ of
