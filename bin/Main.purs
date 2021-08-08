@@ -172,19 +172,18 @@ main = launchAff_ do
               # map Object.fromFoldable
 
           results <- poolTraverse (formatWorker mode) operatorsByPath numThreads filesWithOptions
+          let { errors, unformatted } = partitionCheckedFiles results
 
           case mode of
             Write ->
-              for_ results \{ filePath, error } ->
-                unless (String.null error) do
-                  Console.error $ filePath <> ":\n  " <> error <> "\n"
+              for_ errors \(Tuple filePath error) ->
+                Console.error $ filePath <> ":\n  " <> error <> "\n"
 
-            Check -> do
-              let { errors, unformatted } = partitionCheckedFiles results
-              if Array.null errors && Array.null unformatted then liftEffect do
+            Check -> liftEffect do
+              if Array.null errors && Array.null unformatted then do
                 Console.log "All files are formatted."
                 Process.exit 0
-              else liftEffect do
+              else do
                 unless (Array.null errors) do
                   Console.log "Some files have errors:\n"
                   for_ errors \(Tuple filePath error) ->
