@@ -53,7 +53,7 @@ formatOptions =
           # Arg.number
           # Arg.default defaults.ribbon
     , typeArrowPlacement:
-        Arg.choose "type arrow option"
+        Arg.choose "type arrow placement"
           [ Arg.flag [ "--arrow-first", "-af" ]
               "Type signatures put arrows first on the line.\nDefault."
               $> TypeArrowFirst
