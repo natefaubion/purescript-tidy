@@ -21,7 +21,7 @@ import Data.List (List)
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Monoid (guard, power)
 import Data.Newtype (unwrap)
 import Data.Set as Set
@@ -250,7 +250,10 @@ expandGlobs = map dirToGlob >>> expandGlobsWithStatsCwd >>> map onlyFiles
   where
   dirToGlob path =
     if Path.extname path == "" then
-      Path.concat [ path, "**", "*.purs" ]
+      if isJust (String.stripSuffix (Pattern "**") path) then
+        Path.concat [ path, "*.purs" ]
+      else
+        Path.concat [ path, "**", "*.purs" ]
     else
       path
 
