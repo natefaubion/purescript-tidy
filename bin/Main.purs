@@ -470,7 +470,9 @@ tokenStreamToArray = go []
     TokenCons tok _ next _ ->
       go (Array.snoc acc tok.value) next
 
-partitionCheckedFiles :: Array WorkerOutput -> { errors :: Array (Tuple FilePath String), unformatted :: Array FilePath }
+partitionCheckedFiles
+  :: Array WorkerOutput
+  -> { errors :: Array (Tuple FilePath String), unformatted :: Array FilePath }
 partitionCheckedFiles = do
   let
     foldFn { errors, unformatted } result = do
