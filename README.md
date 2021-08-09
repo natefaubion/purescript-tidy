@@ -103,6 +103,14 @@ let b:ale_fixers = { 'purescript': [ 'purs-tidy' ] }
 let g:ale_fix_on_save = 1
 ```
 
+#### via [Neoformat](https://github.com/sbdchd/neoformat)
+
+Add to your `.vimrc` or `$XDG_CONFIG_HOME/neovim/init.vim`
+
+```viml
+let g:neoformat_enabled_purescript = ['purs-tidy']
+```
+
 ### VS Code
 
 #### via [Run on Save](https://marketplace.visualstudio.com/items?itemName=emeraldwalk.RunOnSave) 
