@@ -86,9 +86,28 @@ $ spago -x ./test/spago.dhall test -a "--accept"
 $ spago -x ./script/spago.dhall run -m GenerateDefaultOperatorsModule
 ```
 
-### Auto-formatting in VS Code
+## Editor Support
 
-First, install the [Run on Save](https://marketplace.visualstudio.com/items?itemName=emeraldwalk.RunOnSave) extension so that you can execute a command when your file is saved. Then, add this to your `settings.json`:
+* [Vim](#vim)
+* [VS Code](#vs-code)
+
+### Vim
+
+#### via [ALE](https://github.com/dense-analysis/ale)
+
+Add to your other fixers `.vimrc` or `$XDG_CONFIG_HOME/neovim/init.vim`
+
+```viml
+let b:ale_fixers = { 'purescript': [ 'purs-tidy' ] }
+" suggested to fix on save
+let g:ale_fix_on_save = 1
+```
+
+### VS Code
+
+#### via [Run on Save](https://marketplace.visualstudio.com/items?itemName=emeraldwalk.RunOnSave) 
+
+Add this to your `settings.json`:
 
 ```json
   "emeraldwalk.runonsave": {
