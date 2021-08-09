@@ -63,28 +63,6 @@ $ purs-tidy generate-operators $(spago sources) > .tidyoperators
 $ purs-tidy generate-config --arrow-first --unicode-never --operators .tidyoperators
 ```
 
-## Development
-
-### Running `bin`
-
-```console
-$ spago -x ./bin/spago.dhall build
-$ ./bin/index.js --help
-```
-
-### Running `test`
-
-To accept snapshot tests:
-
-```console
-$ spago -x ./test/spago.dhall test -a "--accept"
-```
-
-### Generating the built-in operator table
-
-```console
-$ spago -x ./script/spago.dhall run -m GenerateDefaultOperatorsModule
-```
 
 ## Editor Support
 
@@ -105,19 +83,40 @@ let g:ale_fix_on_save = 1
 
 ### VS Code
 
-#### via [Run on Save](https://marketplace.visualstudio.com/items?itemName=emeraldwalk.RunOnSave) 
+#### via [Custom Local Formatters](https://marketplace.visualstudio.com/items?itemName=jkillian.custom-local-formatters) 
 
 Add this to your `settings.json`:
 
 ```json
-  "emeraldwalk.runonsave": {
-    "commands": [
-      {
-        "match": ".purs",
-        "cmd": "$TIDY_DIR/bin/index.js format-in-place ${relativeFile}"
-      }
-    ]
+"customLocalFormatters.formatters": [
+  {
+    "command": "purs-tidy format",
+    "languages": ["purescript"]
   }
+]
 ```
 
-...where `$TIDY_DIR` is replaced with the location of a checkout of `purescript-tidy`.
+## Development
+
+### Running `bin`
+
+```console
+$ spago -x ./bin/spago.dhall build
+$ ./bin/index.js --help
+```
+
+If you would like to use your local build of `purs-tidy` in your editor, use path to `bin/index.js` instead of the `purs-tidy` binary in your settings. For example, instead of setting the format command to `purs-tidy format`, set it to `$TIDY_DIR/bin/index.js format` where `$TIDY_DIR` is the location of your checkout of this repository.
+
+### Running `test`
+
+To accept snapshot tests:
+
+```console
+$ spago -x ./test/spago.dhall test -a "--accept"
+```
+
+### Generating the built-in operator table
+
+```console
+$ spago -x ./script/spago.dhall run -m GenerateDefaultOperatorsModule
+```
