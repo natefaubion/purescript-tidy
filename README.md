@@ -88,12 +88,12 @@ let g:ale_fix_on_save = 1
 Add this to your `settings.json`:
 
 ```json
-  customLocalFormatters.formatters": [
-    {
-      "command": "purs-tidy format",
-      "languages": ["purescript"]
-    }
-  ]
+"customLocalFormatters.formatters": [
+  {
+    "command": "purs-tidy format",
+    "languages": ["purescript"]
+  }
+]
 ```
 
 ## Development
