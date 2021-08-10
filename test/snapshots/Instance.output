@@ -5,11 +5,12 @@ data Foo k
 instance semigroupFoo ::
   ( Semigroup k
   ) =>
-  Semigroup (Foo k) where
+  Semigroup (Foo k)
+  where
   append =
     foo
 
-instance monoidFoo ::
+instance
   ( Monoid k
   ) =>
   Monoid (Foo k) where
@@ -24,11 +25,12 @@ data Foo k
 instance semigroupFoo ::
   ( Semigroup k
   ) =>
-  Semigroup (Foo k) where
+  Semigroup (Foo k)
+  where
   append =
     foo
 
-instance monoidFoo ::
+instance
   ( Monoid k
   ) =>
   Monoid (Foo k) where
