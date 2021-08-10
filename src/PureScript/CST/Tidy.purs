@@ -388,14 +388,14 @@ formatClassHead conf (Tuple cls wh) =
     anchor (foldMap (formatConstraints conf) cls.super)
       `spaceBreak`
         flexGroup do
-          anchor (formatName conf cls.name)
+          formatName conf cls.name
             `spaceBreak`
               joinWithMap spaceBreak (indent <<< formatTypeVarBinding conf) cls.vars
       `spaceBreak`
         flexGroup do
           anchor (foldMap formatFundeps cls.fundeps)
-      `spaceBreak`
-        anchor (foldMap (formatToken conf) wh)
+      `space`
+        foldMap (formatToken conf) wh
   where
   formatFundeps (Tuple tok (Separated { head, tail })) =
     formatToken conf tok
@@ -453,11 +453,11 @@ formatInstanceHead conf (Tuple hd mbWh) =
         `space` anchor (formatName conf name)
         `space` anchor (formatToken conf sep)
         `flexSpaceBreak` indent hdTypes
-        `space` indent (foldMap (anchor <<< formatToken conf) mbWh)
+        `space` indent (foldMap (formatToken conf) mbWh)
     Nothing ->
       formatToken conf hd.keyword
         `flexSpaceBreak` indent hdTypes
-        `space` indent (foldMap (anchor <<< formatToken conf) mbWh)
+        `space` indent (foldMap (formatToken conf) mbWh)
   where
   hdTypes =
     foldMap (formatConstraints conf) hd.constraints
