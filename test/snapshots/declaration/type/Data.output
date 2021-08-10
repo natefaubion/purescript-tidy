@@ -3,6 +3,7 @@ module Data where
 data Void
 
 data Unit =
+
   Unit
 
 data One a = One a
@@ -16,9 +17,7 @@ data Either a b
   | Right b
 
 data ManyArgs a b c d e f =
-  ManyArgs
-    a
-    b
+  ManyArgs a b
     c
     d
     e
@@ -26,38 +25,43 @@ data ManyArgs a b c d e f =
 
 -- what is this
 data Foo
-  (abcdefg ::
-    -- oh
-    Type)
-  (b ::
-    ( foo :: Type
-    , bar ::
-        Type
+  ( abcdefg ::
+      -- oh
+      Type
+  )
+  ( b ::
+      ( foo :: Type
+      , bar ::
           Type
-          Type
-          (Type Type
             Type
-            Type)
-    | FooBar
-    ))
+            Type
+            ( Type Type
+                Type
+                Type
+            )
+      | FooBar
+      )
+  )
 
 data Wat'
-  (a ::
-    forall
-      ---ok
-      x.
-    a ->
-    b ->
-    c)
+  ( a ::
+      forall
+        ---ok
+        x.
+      a ->
+      b ->
+      c
+  )
 
 data Oh
-  (a ::
-    a
-      +
-        -- what
-        b
-      +
-        c)
+  ( a ::
+      a
+        +
+          -- what
+          b
+        +
+          c
+  )
 
 data Foo2
   =

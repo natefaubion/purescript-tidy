@@ -2,9 +2,8 @@ module Newtype where
 
 newtype OK
   a
-  b =
-  OK
-    Boolean
+  b = OK
+  Boolean
 
 newtype Foo ::
   forall k.
@@ -14,8 +13,7 @@ newtype Foo ::
   k ->
   Constraint
 
-newtype Bar a =
-  Bar
-    { wat :: Foo
-    , hey :: String
-    }
+newtype Bar a = Bar
+  { wat :: Foo
+  , hey :: String
+  }

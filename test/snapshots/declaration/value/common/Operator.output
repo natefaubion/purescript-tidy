@@ -7,8 +7,7 @@ common =
 
 flat =
   foo
-    <>
-      bar
+    <> bar
     <>
       baz
 
@@ -22,9 +21,9 @@ mixed =
 
 parens =
   (a && b || c)
-    ||
-      (a &&
-        (b || (c && d)))
+    || ( a &&
+        (b || (c && d))
+    )
     && (a && (c && d))
 
 functor =

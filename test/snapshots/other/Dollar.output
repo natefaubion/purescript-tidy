@@ -1,18 +1,17 @@
 module Dollar where
 
 foo = a $ b
-  $
-    c
+  $ c
   $
     d
 
 foo = a $ b
   $
     -- ok
-    (if x then
-      y
-    else
-      z
+    ( if x then
+        y
+      else
+        z
     )
   $ case _ of
     Ok -> true
