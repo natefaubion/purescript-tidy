@@ -32,5 +32,5 @@
   , "tuples"
   ]
 , packages = ../packages.dhall
-, sources = [ "src/**/*.purs", "test/*.purs", "bin/Bin/*.purs" ]
+, sources = [ "src/**/*.purs", "test/*.purs", "bin/Bin/*.purs", "bin/DefaultOperators.purs" ]
 }
