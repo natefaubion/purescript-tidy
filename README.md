@@ -4,26 +4,32 @@ A syntax tidy-upper (formatter) for PureScript.
 
 ## Install
 
-```sh
-npm install -g purs-tidy
+```console
+$ npm install -g purs-tidy
 ```
 
 ## Usage
 
 You can use `purs-tidy` to format files in place or via STDIN / STDOUT (which is useful for editor integration):
 
-```sh
-# Formatting a collection of files in place:
-$ purs-tidy format-in-place "src/**/*.purs"
+##### Formatting a collection of files in place:
 
-# Using STDIN to format a file:
+```console
+$ purs-tidy format-in-place "src/**/*.purs"
+```
+
+##### Using STDIN to format a file:
+
+```console
 $ purs-tidy format < MyFile.purs
 ```
 
 You can also use `purs-tidy` to verify whether files have already been formatted. This is often useful to verify, in continuous integration, that all project files are formatted according to the configuration. Files that would be changed by running `format-in-place` are listed out.
 
-```sh
-# Verifying files are formatted
+
+##### Verifying files are formatted
+
+```console
 $ purs-tidy check "src/**/*.purs"
 All files are formatted.
 ```
@@ -32,7 +38,7 @@ All files are formatted.
 
 You can see all configuration that `purs-tidy` accepts using the `--help` flag for the command you are using:
 
-```sh
+```console
 $ purs-tidy format-in-place --help
 ```
 
@@ -52,47 +58,65 @@ from the core and contrib organizations. If you need support for more
 operators, you can generate your own table using the `generate-operators`
 command.
 
-```sh
-purs-tidy generate-operators $(spago sources) > .tidyoperators
-purs-tidy generate-config --arrow-first --unicode-never --operators .tidyoperators
+```console
+$ purs-tidy generate-operators $(spago sources) > .tidyoperators
+$ purs-tidy generate-config --arrow-first --unicode-never --operators .tidyoperators
+```
+
+
+## Editor Support
+
+* [Vim](#vim)
+* [VS Code](#vs-code)
+
+### Vim
+
+#### via [ALE](https://github.com/dense-analysis/ale)
+
+Add to your other fixers `.vimrc` or `$XDG_CONFIG_HOME/neovim/init.vim`
+
+```viml
+let b:ale_fixers = { 'purescript': [ 'purs-tidy' ] }
+" suggested to fix on save
+let g:ale_fix_on_save = 1
+```
+
+### VS Code
+
+#### via [Custom Local Formatters](https://marketplace.visualstudio.com/items?itemName=jkillian.custom-local-formatters) 
+
+Add this to your `settings.json`:
+
+```json
+"customLocalFormatters.formatters": [
+  {
+    "command": "purs-tidy format",
+    "languages": ["purescript"]
+  }
+]
 ```
 
 ## Development
 
 ### Running `bin`
 
-```sh
-spago -x ./bin/spago.dhall build
-./bin/index.js --help
+```console
+$ spago -x ./bin/spago.dhall build
+$ ./bin/index.js --help
 ```
+
+If you would like to use your local build of `purs-tidy` in your editor, use path to `bin/index.js` instead of the `purs-tidy` binary in your settings. For example, instead of setting the format command to `purs-tidy format`, set it to `$TIDY_DIR/bin/index.js format` where `$TIDY_DIR` is the location of your checkout of this repository.
 
 ### Running `test`
 
 To accept snapshot tests:
 
-```sh
-spago -x ./test/spago.dhall test -a "--accept"
+```console
+$ spago -x ./test/spago.dhall test -a "--accept"
 ```
 
 ### Generating the built-in operator table
 
-```sh
-spago -x ./script/spago.dhall run -m GenerateDefaultOperatorsModule
+```console
+$ spago -x ./script/spago.dhall run -m GenerateDefaultOperatorsModule
 ```
-
-### Auto-formatting in VS Code
-
-First, install the [Run on Save](https://marketplace.visualstudio.com/items?itemName=emeraldwalk.RunOnSave) extension so that you can execute a command when your file is saved. Then, add this to your `settings.json`:
-
-```json
-  "emeraldwalk.runonsave": {
-    "commands": [
-      {
-        "match": ".purs",
-        "cmd": "$TIDY_DIR/bin/index.js format-in-place ${relativeFile}"
-      }
-    ]
-  }
-```
-
-...where `$TIDY_DIR` is replaced with the location of a checkout of `purescript-tidy`.

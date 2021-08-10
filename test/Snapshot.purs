@@ -2,6 +2,7 @@ module Test.Snapshot where
 
 import Prelude
 
+import Bin.Operators (parseOperatorTable)
 import Control.MonadZero (guard)
 import Data.Array (dropEnd, mapMaybe)
 import Data.Array as Array
@@ -19,6 +20,7 @@ import Data.String as String
 import Data.String.Regex as Regex
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..), fst)
+import DefaultOperators (defaultOperators)
 import Dodo (PrintOptions)
 import Dodo as Dodo
 import Effect (Effect)
@@ -38,6 +40,7 @@ import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (printParseError)
 import PureScript.CST.Tidy (class FormatError, FormatOptions)
 import PureScript.CST.Tidy as Tidy
+import PureScript.CST.Tidy.Precedence (PrecedenceMap)
 import PureScript.CST.Types (Module)
 import Test.FormatDirective (defaultFormat, directiveRegex, parseDirectivesFromModule)
 
@@ -228,7 +231,10 @@ snapshotFormat accept mbPattern = do
           makeErrorResult name (error "Mismatched format options in output file.")
 
   formatModule :: forall e a. PrintOptions -> FormatOptions e a -> Module e -> String
-  formatModule opts conf = Dodo.print Dodo.plainText opts <<< Tidy.toDoc <<< Tidy.formatModule conf
+  formatModule opts conf = Dodo.print Dodo.plainText opts <<< Tidy.toDoc <<< Tidy.formatModule (conf { operators = operators })
+
+  operators :: PrecedenceMap
+  operators = parseOperatorTable defaultOperators
 
 exec :: String -> Aff ExecResult
 exec command = makeAff \k -> do

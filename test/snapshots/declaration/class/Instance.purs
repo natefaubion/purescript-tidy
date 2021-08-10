@@ -9,9 +9,8 @@ instance semigroupFoo :: (Semigroup k)
            append =
              foo
 
-instance monoidFoo ::
+instance
   (Monoid k)
-    => Monoid (Foo k)
-                   where
-                     append x y =    foo x
+    => Monoid (Foo k) where
+                      append x y =    foo x
                                            y
