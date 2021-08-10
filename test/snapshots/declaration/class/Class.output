@@ -9,8 +9,7 @@ class
     (b :: Type)
     k
   | a -> k a
-  , b -> a
-  where
+  , b -> a where
   foo ::
     a ->
     b
