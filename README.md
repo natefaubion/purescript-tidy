@@ -8,6 +8,8 @@ A syntax tidy-upper (formatter) for PureScript.
 $ npm install -g purs-tidy
 ```
 
+Also available for [Nix](https://nixos.org/) via [Easy PureScript Nix](https://github.com/justinwoo/easy-purescript-nix)
+
 ## Usage
 
 You can use `purs-tidy` to format files in place or via STDIN / STDOUT (which is useful for editor integration):
