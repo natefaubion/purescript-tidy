@@ -63,7 +63,6 @@ $ purs-tidy generate-operators $(spago sources) > .tidyoperators
 $ purs-tidy generate-config --arrow-first --unicode-never --operators .tidyoperators
 ```
 
-
 ## Editor Support
 
 * [Vim](#vim)
@@ -91,17 +90,12 @@ let g:neoformat_enabled_purescript = ['purs-tidy']
 
 ### VS Code
 
-#### via [Custom Local Formatters](https://marketplace.visualstudio.com/items?itemName=jkillian.custom-local-formatters) 
+#### via [PureScript IDE](https://marketplace.visualstudio.com/items?itemName=nwolverson.ide-purescript)
 
-Add this to your `settings.json`:
+The PureScript IDE plugin for VS Code supports `purs-tidy` as a built-in formatter in versions after `0.25.1`. Choose `purs-tidy` from the list of supported formatters in the settings, or add this to your `settings.json`:
 
 ```json
-"customLocalFormatters.formatters": [
-  {
-    "command": "purs-tidy format",
-    "languages": ["purescript"]
-  }
-]
+"purescript.formatter": "purs-tidy"
 ```
 
 ## Development
