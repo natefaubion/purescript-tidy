@@ -82,7 +82,7 @@ let g:ale_fix_on_save = 1
 
 ### VS Code
 
-#### via [Purescript IDE](https://marketplace.visualstudio.com/items?itemName=nwolverson.ide-purescript)
+#### via [PureScript IDE](https://marketplace.visualstudio.com/items?itemName=nwolverson.ide-purescript)
 
 The PureScript IDE plugin for VS Code supports `purs-tidy` as a built-in formatter in versions after `0.25.1`. Choose `purs-tidy` from the list of supported formatters in the settings, or add this to your `settings.json`:
 
