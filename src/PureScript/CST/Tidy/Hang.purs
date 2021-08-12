@@ -20,7 +20,7 @@ import Data.Maybe (maybe)
 import Data.Tuple (Tuple(..), uncurry)
 import Dodo (Doc)
 import Dodo as Dodo
-import PureScript.CST.Tidy.Doc (ForceBreak(..), FormatDoc(..), anchor, flexGroup, forceBreak)
+import PureScript.CST.Tidy.Doc (ForceBreak(..), FormatDoc(..), flatten, flexGroup, forceBreak)
 
 data HangingDoc a
   = HangBreak (FormatDoc a)
@@ -190,9 +190,12 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
 
   formatInitOp :: FormatDoc a -> HangingDoc a -> HangDoc a
   formatInitOp op doc = case op, hangHead doc of
-    FormatDoc fl1 n1 _ _ fr1, FormatDoc fl2 n2 _ _ _
+    FormatDoc fl1 n1 _ _ fr1, FormatDoc fl2 n2 m2 _ _
       | fl1 /= ForceBreak && n1 == 0 && fr1 /= ForceBreak && fl2 /= ForceBreak && n2 > 0 ->
-          formatInitOp (forceBreak op) (overHangHead anchor doc)
+          formatInitOp (forceBreak op) (overHangHead flatten doc)
+      | HangBreak _ <- doc
+      , fr1 /= ForceBreak && fl2 /= ForceBreak && n2 == 0 && m2 ->
+          formatOp op (followLast HangStkRoot (overHangHead forceBreak doc))
     _, _ ->
       formatOp op (followLast HangStkRoot doc)
 
