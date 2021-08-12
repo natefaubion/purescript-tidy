@@ -1,0 +1,68 @@
+module MultilineNamedBinders where
+
+test
+  ok@
+    { a
+    , b
+    , c
+    } =
+  a b c
+
+test = do
+  ok@
+    { a
+    , b
+    , c
+    } <- foo
+  a b c
+
+test = ado
+  ok@
+    { a
+    , b
+    , c
+    } <- foo
+  in a b c
+
+test = do
+  let
+    ok@
+      { a
+      , b
+      , c
+      } = a b c
+  a b c
+
+test = ado
+  let
+    ok@
+      { a
+      , b
+      , c
+      } = a b c
+  in a b c
+
+test =
+  let
+    ok@
+      { a
+      , b
+      , c
+      } = a b c
+  in
+    a b c
+
+test = a b c
+  where
+  ok@
+    { a
+    , b
+    , c
+    } = a b c
+
+test = case _ of
+  ok@
+    { a
+    , b
+    , c
+    } -> a b c

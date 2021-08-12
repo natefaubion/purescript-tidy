@@ -957,7 +957,7 @@ formatHangingBinder conf = case _ of
   BinderVar n ->
     hangBreak $ formatName conf n
   BinderNamed n t b ->
-    hangBreak $ formatName conf n <> (anchor (formatToken conf t) `flexSoftBreak` formatBinder conf b)
+    hangBreak $ formatName conf n <> (anchor (formatToken conf t) `flexSoftBreak` indent (formatBinder conf b))
   BinderConstructor n binders -> do
     let ctorName = hangBreak $ formatQualifiedName conf n
     case NonEmptyArray.fromArray binders of
