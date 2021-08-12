@@ -13,16 +13,16 @@ import PureScript.CST.Lexer as Lexer
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), Precedence, QualifiedOperator(..), PrecedenceMap, insertOperator, lookupOperator, remapOperators)
 import PureScript.CST.TokenStream (TokenStep(..), TokenStream)
 import PureScript.CST.TokenStream as TokenStream
-import PureScript.CST.Types (Declaration(..), Export(..), FixityOp(..), Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), Operator(..), Separated(..), Token(..), Wrapped(..))
+import PureScript.CST.Types (Declaration(..), Export(..), FixityOp(..), IntValue(..), Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), Operator(..), Separated(..), Token(..), Wrapped(..))
 
 parseOperatorTable :: Array String -> PrecedenceMap
 parseOperatorTable = foldr (uncurry insertOperator) Map.empty <<< Array.mapMaybe parseOperatorPrec
 
 parseOperatorPrec :: String -> Maybe (Tuple QualifiedOperator Precedence)
 parseOperatorPrec = Lexer.lex >>> tokenStreamToArray >>> case _ of
-  Right [ TokSymbolName modName op, TokInt _ prec ] ->
+  Right [ TokSymbolName modName op, TokInt _ (SmallInt prec) ] ->
     Just $ Tuple (QualifiedOperator modName OperatorValue (Operator op)) prec
-  Right [ TokSymbolName modName op, TokLowerName Nothing "type", TokInt _ prec ] ->
+  Right [ TokSymbolName modName op, TokLowerName Nothing "type", TokInt _ (SmallInt prec) ] ->
     Just $ Tuple (QualifiedOperator modName OperatorType (Operator op)) prec
   _ ->
     Nothing
