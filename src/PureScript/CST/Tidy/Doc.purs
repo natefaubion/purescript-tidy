@@ -84,7 +84,7 @@ flatten :: forall a. FormatDoc a -> FormatDoc a
 flatten = case _ of
   FormatEmpty ->
     FormatEmpty
-  FormatDoc fl n m doc fr ->
+  FormatDoc fl _ m doc fr ->
     FormatDoc fl 0 m doc fr
 
 forceBreak :: forall a. FormatDoc a -> FormatDoc a

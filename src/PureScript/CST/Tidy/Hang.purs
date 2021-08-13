@@ -125,11 +125,15 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
       b
     a, HangEmpty ->
       formatBreak a
-    FormatDoc fl1 n1 m1 doc1 _, HangGroup _ docBreak (FormatDoc' _ _ _ _ fr2) ->
+    a@(FormatDoc fl1 n1 _ doc1 _), HangGroup _ docBreak b@(FormatDoc' _ _ _ _ fr2) ->
       HangGroup
         (forceBreaks n1 <> doc1 <> docBreak)
         (forceBreaks n1 <> doc1 <> docBreak)
-        (FormatDoc' fl1 n1 m1 (Dodo.flexGroup doc1 <> docBreak) fr2)
+        ( FormatDoc' fl1 n1
+            (isMultiline a || isMultiline' b)
+            (Dodo.flexGroup doc1 <> docBreak)
+            fr2
+        )
 
   formatApp :: (Doc a -> Doc a) -> FormatDoc a -> HangDoc a -> HangDoc a
   formatApp ind = case _, _ of
@@ -137,7 +141,7 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
       b
     a, HangEmpty ->
       formatBreak a
-    FormatDoc fl1 n1 m1 doc1 _, HangGroup docGroup _ (FormatDoc' _ _ _ _ fr2) -> do
+    a@(FormatDoc fl1 n1 _ doc1 _), HangGroup docGroup _ b@(FormatDoc' _ _ _ _ fr2) -> do
       let docIndent = ind docGroup
       HangGroup
         ( Dodo.flexSelect
@@ -146,7 +150,11 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
             docIndent
         )
         (forceBreaks n1 <> doc1 <> docIndent)
-        (FormatDoc' fl1 n1 m1 (Dodo.flexGroup doc1 <> docIndent) fr2)
+        ( FormatDoc' fl1 n1
+            (isMultiline a || isMultiline' b)
+            (Dodo.flexGroup doc1 <> docIndent)
+            fr2
+        )
 
   formatArg :: FormatDoc a -> HangDoc a -> HangDoc a
   formatArg = case _, _ of
@@ -154,7 +162,7 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
       b
     a, HangEmpty ->
       formatBreak a
-    FormatDoc fl1 n1 m1 doc1 _, HangGroup docGroup docBreak (FormatDoc' _ _ _ _ fr2) ->
+    a@(FormatDoc fl1 n1 _ doc1 _), HangGroup docGroup docBreak b@(FormatDoc' _ _ _ _ fr2) ->
       HangGroup
         ( Dodo.flexSelect
             (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))
@@ -162,7 +170,8 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
             docBreak
         )
         (forceBreaks n1 <> doc1 <> docBreak)
-        ( FormatDoc' fl1 n1 m1
+        ( FormatDoc' fl1 n1
+            (isMultiline a || isMultiline' b)
             ( Dodo.flexSelect
                 (withBreaks fl1 n1 doc1 doc1)
                 docGroup
@@ -177,7 +186,7 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
       b
     a, HangEmpty ->
       formatBreak a
-    FormatDoc fl1 n1 m1 doc1 fr1, HangGroup docGroup docBreak (FormatDoc' fl2 n2 _ doc2 fr2) -> do
+    a@(FormatDoc fl1 n1 _ doc1 fr1), HangGroup docGroup docBreak b@(FormatDoc' fl2 n2 _ doc2 fr2) -> do
       let docIndent = Dodo.indent docGroup
       HangGroup
         ( Dodo.flexSelect
@@ -186,7 +195,16 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
             docIndent
         )
         (forceBreaks n1 <> doc1 <> docIndent)
-        (FormatDoc' fl1 n1 m1 (Dodo.flexGroup doc1 <> (if fr1 == ForceBreak || fl2 == ForceBreak || n2 > 0 then Dodo.indent docBreak else Dodo.space <> doc2)) fr2)
+        ( FormatDoc' fl1 n1
+            (isMultiline a || isMultiline' b)
+            ( Dodo.flexGroup doc1 <>
+                if fr1 == ForceBreak || fl2 == ForceBreak || n2 > 0 then
+                  Dodo.indent docBreak
+                else
+                  Dodo.space <> doc2
+            )
+            fr2
+        )
 
   formatInitOp :: FormatDoc a -> HangingDoc a -> HangDoc a
   formatInitOp op doc = case op, hangHead doc of
@@ -203,9 +221,10 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
   formatBreak = case _ of
     FormatEmpty ->
       HangEmpty
-    FormatDoc fl n m doc fr ->
+    FormatDoc fl n m doc fr -> do
+      let group = if m then identity else Dodo.flexGroup
       HangGroup
-        (withBreaks fl n doc (Dodo.flexGroup (Dodo.spaceBreak <> doc)))
+        (withBreaks fl n doc (group (Dodo.spaceBreak <> doc)))
         (forceBreaks n <> doc)
         (FormatDoc' fl n m doc fr)
 
@@ -218,3 +237,20 @@ withBreaks :: forall a. ForceBreak -> Int -> Doc a -> Doc a -> Doc a
 withBreaks fl n doc1 doc2
   | n > 0 || fl == ForceBreak = forceBreaks n <> doc1
   | otherwise = doc2
+
+isMultiline :: forall a. FormatDoc a -> Boolean
+isMultiline = case _ of
+  FormatEmpty ->
+    false
+  FormatDoc fl n m _ fr ->
+    fl == ForceBreak
+      || n > 0
+      || m
+      || fr == ForceBreak
+
+isMultiline' :: forall a. FormatDoc' a -> Boolean
+isMultiline' (FormatDoc' fl n m _ fr) =
+  fl == ForceBreak
+    || n > 0
+    || m
+    || fr == ForceBreak
