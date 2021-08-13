@@ -10,7 +10,7 @@ instance semigroupFooBlah ::
 else instance semigroupFooBlaz :: Semigroup (Foo k) where
   append x y = x
 
--- @format --arrow-first
+-- @format --arrow-last
 module InstanceChain where
 
 data Foo k

@@ -1,4 +1,4 @@
--- @format --arrow-first
+-- @format --arrow-last
 module InstanceChain where
 
 data Foo k

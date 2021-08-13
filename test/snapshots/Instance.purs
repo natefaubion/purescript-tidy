@@ -1,4 +1,4 @@
--- @format --arrow-first
+-- @format --arrow-last
 module Instance where
 
 data Foo k

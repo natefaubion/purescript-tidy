@@ -57,7 +57,7 @@ defaultFormatOptions :: forall e a. FormatError e => FormatOptions e a
 defaultFormatOptions =
   { formatError
   , unicode: UnicodeSource
-  , typeArrowPlacement: TypeArrowLast
+  , typeArrowPlacement: TypeArrowFirst
   , operators: Map.empty
   }
 
