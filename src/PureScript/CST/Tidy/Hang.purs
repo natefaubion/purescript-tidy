@@ -130,7 +130,7 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
         (forceBreaks n1 <> doc1 <> docBreak)
         (forceBreaks n1 <> doc1 <> docBreak)
         ( FormatDoc' fl1 n1
-            (isMultiline a || isMultiline' b)
+            (isMultilineJoin a b)
             (Dodo.flexGroup doc1 <> docBreak)
             fr2
         )
@@ -151,7 +151,7 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
         )
         (forceBreaks n1 <> doc1 <> docIndent)
         ( FormatDoc' fl1 n1
-            (isMultiline a || isMultiline' b)
+            (isMultilineJoin a b)
             (Dodo.flexGroup doc1 <> docIndent)
             fr2
         )
@@ -171,7 +171,7 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
         )
         (forceBreaks n1 <> doc1 <> docBreak)
         ( FormatDoc' fl1 n1
-            (isMultiline a || isMultiline' b)
+            (isMultilineJoin a b)
             ( Dodo.flexSelect
                 (withBreaks fl1 n1 doc1 doc1)
                 docGroup
@@ -196,7 +196,7 @@ toFormatDoc = unHangDoc <<< followLast HangStkRoot
         )
         (forceBreaks n1 <> doc1 <> docIndent)
         ( FormatDoc' fl1 n1
-            (isMultiline a || isMultiline' b)
+            (isMultilineJoin a b)
             ( Dodo.flexGroup doc1 <>
                 if fr1 == ForceBreak || fl2 == ForceBreak || n2 > 0 then
                   Dodo.indent docBreak
@@ -238,19 +238,16 @@ withBreaks fl n doc1 doc2
   | n > 0 || fl == ForceBreak = forceBreaks n <> doc1
   | otherwise = doc2
 
-isMultiline :: forall a. FormatDoc a -> Boolean
-isMultiline = case _ of
-  FormatEmpty ->
-    false
-  FormatDoc fl n m _ fr ->
-    fl == ForceBreak
-      || n > 0
-      || m
+isMultilineJoin :: forall a. FormatDoc a -> FormatDoc' a -> Boolean
+isMultilineJoin = case _, _ of
+  FormatEmpty, FormatDoc' fl n m _ fr ->
+    m
+      || fl == ForceBreak
       || fr == ForceBreak
-
-isMultiline' :: forall a. FormatDoc' a -> Boolean
-isMultiline' (FormatDoc' fl n m _ fr) =
-  fl == ForceBreak
-    || n > 0
-    || m
-    || fr == ForceBreak
+      || n > 0
+  FormatDoc _ _ m1 _ fr1, FormatDoc' fl2 n2 m2 _ _ ->
+    m1
+      || m2
+      || fr1 == ForceBreak
+      || fl2 == ForceBreak
+      || n2 > 0
