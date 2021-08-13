@@ -835,7 +835,7 @@ formatCaseBranch :: forall e a. Format (Tuple (Separated (Binder e)) (Guarded e)
 formatCaseBranch conf (Tuple (Separated { head, tail }) guarded) =
   case guarded of
     Unconditional tok (Where { expr, bindings }) ->
-      flexGroup caseBinders
+      caseBinders
         `space`
           Hang.toFormatDoc (formatToken conf tok `hang` formatHangingExpr conf expr)
         `break`
