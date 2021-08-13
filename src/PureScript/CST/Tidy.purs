@@ -805,7 +805,7 @@ toElseIfChain ifte = go (pure (IfThen ifte.keyword ifte.cond ifte.then ifte.true
       NonEmptyArray.snoc acc (Else curr.else expr)
 
 formatElseIfChain :: forall e a. Format (NonEmptyArray (ElseIfChain e)) e a
-formatElseIfChain conf = joinWithMap flexSpaceBreak case _ of
+formatElseIfChain conf = flexGroup <<< joinWithMap spaceBreak case _ of
   IfThen kw1 cond kw2 expr ->
     formatToken conf kw1
       `flexSpaceBreak`
@@ -917,7 +917,7 @@ formatValueBinding conf { name, binders, guarded } =
           indent do
             joinWithMap spaceBreak (anchor <<< formatBinder conf) binders
         `space`
-          Hang.toFormatDoc (indent (formatToken conf tok) `hang` formatHangingExpr conf expr)
+          Hang.toFormatDoc (indent (anchor (formatToken conf tok)) `hang` formatHangingExpr conf expr)
         `break`
           indent (foldMap (formatWhere conf) bindings)
 

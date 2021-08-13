@@ -19,14 +19,19 @@ bools :: Array Boolean
 bools =
   [ (a && b || c)
   , ( a &&
-        (b || (c && d))
+        ( b ||
+            ( c && d
+            )
+        )
     )
-  , (a && (c && d))
+  , ( a &&
+        ( c && d
+        )
+    )
   ]
 
 strings :: Array String
-strings
-  =
+strings =
   [ "hello"
   , "world"
   , "strings"
