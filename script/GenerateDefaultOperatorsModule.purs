@@ -57,7 +57,8 @@ main = do
   writeTextFile UTF8 (Path.concat [ cwdPath, "bin", "DefaultOperators.purs" ]) contents
 
 defaultSpagoDhall :: String
-defaultSpagoDhall = """
+defaultSpagoDhall =
+  """
   { name = "purs-tidy-generate-default-operators"
   , dependencies =
     [ "ace"
