@@ -2,6 +2,7 @@ module PureScript.CST.Tidy
   ( FormatOptions
   , defaultFormatOptions
   , TypeArrowOption(..)
+  , ImportWrapOption(..)
   , Format
   , formatModule
   , formatDecl
@@ -45,11 +46,18 @@ data TypeArrowOption
 
 derive instance eqTypeArrowOption :: Eq TypeArrowOption
 
+data ImportWrapOption
+  = ImportWrapSource
+  | ImportWrapAuto
+
+derive instance eqImportWrapOption :: Eq ImportWrapOption
+
 type FormatOptions e a =
   { formatError :: e -> FormatDoc a
   , unicode :: UnicodeOption
   , typeArrowPlacement :: TypeArrowOption
   , operators :: PrecedenceMap
+  , importWrap :: ImportWrapOption
   }
 
 defaultFormatOptions :: forall e a. FormatError e => FormatOptions e a
@@ -58,6 +66,7 @@ defaultFormatOptions =
   , unicode: UnicodeSource
   , typeArrowPlacement: TypeArrowFirst
   , operators: Map.empty
+  , importWrap: ImportWrapSource
   }
 
 class FormatError e where
@@ -172,10 +181,17 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
             anchor (foldMap (formatParenListNonEmpty NotGrouped formatExport conf) header.exports)
           `space`
             anchor (formatToken conf header."where")
-    , joinWithMap break (formatImportDecl conf) header.imports
+    , case conf.importWrap of
+        ImportWrapAuto ->
+          imports
+        ImportWrapSource ->
+          locally (_ { pageWidth = top, ribbonRatio = 1.0 }) imports
     , joinWithMap break (formatDecl conf) body.decls
     , foldr (formatComment leadingLineComment) mempty body.trailingComments
     ]
+  where
+  imports =
+    joinWithMap break (formatImportDecl conf) header.imports
 
 formatExport :: forall e a. Format (Export e) e a
 formatExport conf = case _ of
