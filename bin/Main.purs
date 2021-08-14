@@ -290,7 +290,8 @@ formatCommand args operators contents = do
     ParseSucceeded ok -> do
       let
         opts = defaultFormatOptions
-          { operators = remapOperators operators ok
+          { importWrap = args.importWrap
+          , operators = remapOperators operators ok
           , typeArrowPlacement = args.typeArrowPlacement
           , unicode = args.unicode
           }
@@ -299,7 +300,8 @@ formatCommand args operators contents = do
       let
         opts =
           defaultFormatOptions
-            { operators = remapOperators operators ok
+            { importWrap = args.importWrap
+            , operators = remapOperators operators ok
             , typeArrowPlacement = args.typeArrowPlacement
             , unicode = args.unicode
             }
@@ -308,7 +310,8 @@ formatCommand args operators contents = do
       Left err.error
 
 type WorkerConfig =
-  { indent :: Int
+  { importWrap :: String
+  , indent :: Int
   , operatorsFile :: String
   , ribbon :: Number
   , typeArrowPlacement :: String
@@ -318,7 +321,8 @@ type WorkerConfig =
 
 toWorkerConfig :: FormatOptions -> WorkerConfig
 toWorkerConfig options =
-  { indent: options.indent
+  { importWrap: FormatOptions.importWrapToString options.importWrap
+  , indent: options.indent
   , operatorsFile: fromMaybe ".tidyoperators.default" options.operatorsFile
   , ribbon: options.ribbon
   , typeArrowPlacement: FormatOptions.typeArrowPlacementToString options.typeArrowPlacement
@@ -357,7 +361,10 @@ formatWorker = Worker.make \{ receive, reply, workerData: { shouldCheck, operato
 
       formatOptions :: FormatOptions
       formatOptions =
-        { indent: config.indent
+        { importWrap:
+            fromRight' (\_ -> unsafeCrashWith "Unknown importWrap value") do
+              FormatOptions.importWrapFromString config.importWrap
+        , indent: config.indent
         , operatorsFile: Nothing
         , ribbon: config.ribbon
         , typeArrowPlacement:

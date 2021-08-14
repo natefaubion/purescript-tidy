@@ -13,10 +13,11 @@ import Data.Argonaut.Encode (assoc, encodeJson, extend)
 import Data.Either (Either)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Traversable (traverse)
-import PureScript.CST.Tidy (TypeArrowOption(..), UnicodeOption(..))
+import PureScript.CST.Tidy (ImportWrapOption(..), TypeArrowOption(..), UnicodeOption(..))
 
 type FormatOptions =
-  { indent :: Int
+  { importWrap :: ImportWrapOption
+  , indent :: Int
   , operatorsFile :: Maybe String
   , ribbon :: Number
   , typeArrowPlacement :: TypeArrowOption
@@ -26,7 +27,8 @@ type FormatOptions =
 
 defaults :: FormatOptions
 defaults =
-  { indent: 2
+  { importWrap: ImportWrapSource
+  , indent: 2
   , operatorsFile: Nothing
   , ribbon: 1.0
   , typeArrowPlacement: TypeArrowFirst
@@ -37,7 +39,17 @@ defaults =
 formatOptions :: ArgParser FormatOptions
 formatOptions =
   Arg.fromRecord
-    { indent:
+    { importWrap:
+        Arg.choose "import wrap"
+          [ Arg.flag [ "--import-wrap-source", "-iws" ]
+              "Imports are wrapped only when breaks are in the source.\nDefault. Works well with IDE imports."
+              $> ImportWrapSource
+          , Arg.flag [ "--import-wrap-auto", "-iwa" ]
+              "Imports are wrapped based on the `--width` option."
+              $> ImportWrapAuto
+          ]
+          # Arg.default defaults.importWrap
+    , indent:
         Arg.argument [ "--indent", "-i" ]
           "Number of spaces to use as indentation.\nDefaults to 2."
           # Arg.int
@@ -88,6 +100,7 @@ unicodeOption =
 fromJson :: Json -> Either JsonDecodeError FormatOptions
 fromJson json = do
   obj <- decodeJson json
+  importWrap <- traverse importWrapFromString =<< obj .:? "importWrap"
   indent <- obj .:? "indent"
   operatorsFile <- obj .:? "operatorsFile"
   ribbon <- obj .:? "ribbon"
@@ -95,7 +108,8 @@ fromJson json = do
   unicode <- traverse unicodeFromString =<< obj .:? "unicode"
   width <- obj .:? "width"
   pure
-    { indent: fromMaybe defaults.indent indent
+    { importWrap: fromMaybe defaults.importWrap importWrap
+    , indent: fromMaybe defaults.indent indent
     , operatorsFile: operatorsFile <|> defaults.operatorsFile
     , ribbon: fromMaybe defaults.ribbon ribbon
     , typeArrowPlacement: fromMaybe defaults.typeArrowPlacement typeArrowPlacement
@@ -106,6 +120,7 @@ fromJson json = do
 toJson :: FormatOptions -> Json
 toJson options =
   jsonEmptyObject
+    # extend (assoc "importWrap" (importWrapToString options.importWrap))
     # extend (assoc "indent" options.indent)
     # extend (assoc "operatorsFile" (maybe jsonNull encodeJson options.operatorsFile))
     # extend (assoc "ribbon" options.ribbon)
@@ -136,3 +151,14 @@ unicodeToString = case _ of
   UnicodeSource -> "source"
   UnicodeAlways -> "always"
   UnicodeNever -> "never"
+
+importWrapFromString :: String -> Either JsonDecodeError ImportWrapOption
+importWrapFromString = case _ of
+  "source" -> pure ImportWrapSource
+  "auto" -> pure ImportWrapAuto
+  other -> throwError $ UnexpectedValue (Json.fromString other)
+
+importWrapToString :: ImportWrapOption -> String
+importWrapToString = case _ of
+  ImportWrapSource -> "source"
+  ImportWrapAuto -> "auto"
