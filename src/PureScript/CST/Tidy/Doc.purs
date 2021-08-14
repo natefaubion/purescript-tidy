@@ -11,6 +11,7 @@ module PureScript.CST.Tidy.Doc
   , indent
   , align
   , alignCurrentColumn
+  , locally
   , break
   , softBreak
   , spaceBreak
@@ -30,12 +31,15 @@ module PureScript.CST.Tidy.Doc
 import Prelude
 
 import Data.Array as Array
-import Data.Foldable (class Foldable, foldl)
-import Data.String (Pattern(..))
+import Data.Foldable (class Foldable, foldMap, foldl)
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Monoid (power)
 import Data.String as String
 import Data.Tuple (Tuple(..))
 import Dodo (Doc)
 import Dodo as Dodo
+import Dodo.Internal (LocalOptions)
+import Tidy.Util (splitLines)
 
 data ForceBreak
   = ForceNone
@@ -68,10 +72,36 @@ trailingLineComment :: forall a. String -> FormatDoc a
 trailingLineComment str = FormatDoc ForceSpace 0 false (Dodo.text str) ForceBreak
 
 blockComment :: forall a. String -> FormatDoc a
-blockComment str = do
-  let lines = String.split (Pattern "\r?\n") str
-  let multi = Array.length lines > 1
-  FormatDoc ForceSpace 0 multi (Dodo.lines $ map Dodo.text lines) ForceSpace
+blockComment = splitLines >>> Array.uncons >>> foldMap \{ head, tail } -> do
+  let
+    prefixSpaces =
+      tail
+        # map (String.length <<< String.takeWhile (eq (String.codePointFromChar ' ')))
+        # Array.sort
+        # Array.head
+  case prefixSpaces of
+    Nothing ->
+      FormatDoc ForceSpace 0 false (Dodo.text head) ForceSpace
+    Just ind ->
+      FormatDoc ForceSpace 0 true commentDoc ForceSpace
+      where
+      commentDoc = Dodo.withPosition \pos -> do
+        let newIndent = if ind < pos.indent then 0 else ind
+        let spaces = power " " newIndent
+        let tailDocs = map (\str -> Dodo.text $ fromMaybe str $ String.stripPrefix (String.Pattern spaces) str) tail
+        Dodo.lines
+          [ Dodo.text head
+          , Dodo.locally
+              ( \prev ->
+                  if newIndent < prev.indent then
+                    prev
+                      { indentSpaces = spaces
+                      , indent = newIndent
+                      }
+                  else prev
+              )
+              (Dodo.lines tailDocs)
+          ]
 
 anchor :: forall a. FormatDoc a -> FormatDoc a
 anchor = case _ of
@@ -110,6 +140,9 @@ align = mapDoc <<< Dodo.align
 
 alignCurrentColumn :: forall a. FormatDoc a -> FormatDoc a
 alignCurrentColumn = mapDoc Dodo.alignCurrentColumn
+
+locally :: forall a. (LocalOptions -> LocalOptions) -> FormatDoc a -> FormatDoc a
+locally = mapDoc <<< Dodo.locally
 
 sourceBreak :: forall a. Int -> FormatDoc a -> FormatDoc a
 sourceBreak m = case _ of

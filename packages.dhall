@@ -29,7 +29,7 @@ let additions =
         { dependencies =
           [ "ansi", "foldable-traversable", "lists", "maybe", "strings" ]
         , repo = "https://github.com/natefaubion/purescript-dodo-printer.git"
-        , version = "v2.0.0"
+        , version = "v2.1.0"
         }
       , node-glob-basic =
         { dependencies =

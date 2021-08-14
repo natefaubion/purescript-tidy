@@ -24,14 +24,12 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..))
 import Data.Monoid (power)
 import Data.Monoid as Monoid
-import Data.String (Pattern(..))
-import Data.String as String
 import Data.String.CodeUnits as SCU
 import Data.Tuple (Tuple(..), fst)
 import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
+import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
 import PureScript.CST.Tidy.Doc (FormatDoc, toDoc) as Exports
 import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp, hangOps, hangWithIndent)
 import PureScript.CST.Tidy.Hang as Hang
@@ -39,6 +37,7 @@ import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), 
 import PureScript.CST.Tidy.Token (UnicodeOption(..)) as Exports
 import PureScript.CST.Tidy.Token (UnicodeOption(..), printToken)
 import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
+import Tidy.Util (splitLines, splitStringEscapeLines)
 
 data TypeArrowOption
   = TypeArrowFirst
@@ -103,7 +102,7 @@ instance formatErrorRecoveredError :: FormatError RecoveredError where
         | SCU.take 2 str == "--" ->
             { line: false, doc: acc.doc <> Dodo.text str }
         | otherwise ->
-            { line: false, doc: acc.doc <> Dodo.lines (Dodo.text <$> String.split (Pattern "\r?\n") str) }
+            { line: false, doc: acc.doc <> Dodo.lines (Dodo.text <$> splitLines str) }
       Line _ n ->
         { line: true, doc: acc.doc <> power Dodo.break n }
       Space n
@@ -136,10 +135,27 @@ formatWithComments leading trailing doc =
     leading
 
 formatToken :: forall a r. { unicode :: UnicodeOption | r } -> SourceToken -> FormatDoc a
-formatToken conf tok =
-  formatWithComments tok.leadingComments tok.trailingComments
-    $ text
-    $ printToken conf.unicode tok.value
+formatToken conf tok = formatWithComments tok.leadingComments tok.trailingComments tokDoc
+  where
+  tokStr = printToken conf.unicode tok.value
+  tokDoc = case tok.value of
+    TokRawString _ -> formatRawString tokStr
+    TokString _ _ -> formatString tokStr
+    _ -> text tokStr
+
+formatRawString :: forall a. String -> FormatDoc a
+formatRawString = splitLines >>> Array.uncons >>> foldMap \{ head, tail } ->
+  text head `break` locally (_ { indent = 0, indentSpaces = "" }) do
+    joinWithMap break text tail
+
+formatString :: forall a. String -> FormatDoc a
+formatString = splitStringEscapeLines >>> Array.uncons >>> foldMap \{ head, tail } ->
+  case Array.unsnoc tail of
+    Nothing -> text head
+    Just rest ->
+      text (head <> "\\")
+        `break` joinWithMap break (\str -> text ("\\" <> str <> "\\")) rest.init
+        `break` text ("\\" <> rest.last)
 
 formatName :: forall e a n. Format (Name n) e a
 formatName conf (Name { token }) = formatToken conf token
