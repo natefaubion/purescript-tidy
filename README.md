@@ -102,6 +102,12 @@ The PureScript IDE plugin for VS Code supports `purs-tidy` as a built-in formatt
 
 ## Development
 
+### Requirements
+
+* `purs`: 0.14
+* `spago`: 0.20
+* `node`: 14
+
 ### Running `bin`
 
 ```console
