@@ -633,6 +633,7 @@ formatHangingPolytype ind conf { init, last } = case conf.typeArrowPlacement of
         case _ of
           PolyArrow _ { value: TokRightArrow Unicode } -> true
           PolyArrow _ { value: TokRightFatArrow Unicode } -> true
+          PolyForall { value: TokForall Unicode } _ _ -> true
           _ -> false
 
     formatPolyArrowFirst k = case _ of
