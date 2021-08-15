@@ -1,0 +1,22 @@
+module UnicodeSignatures where
+
+test
+  ∷ ∀ a
+  . a
+  → a
+
+-- @format --unicode-always
+module UnicodeSignatures where
+
+test
+  ∷ ∀ a
+  . a
+  → a
+
+-- @format --unicode-never
+module UnicodeSignatures where
+
+test
+  :: forall a
+   . a
+  -> a
