@@ -34,8 +34,5 @@
   "bugs": {
     "url": "https://github.com/natefaubion/purescript-tidy/issues"
   },
-  "homepage": "https://github.com/natefaubion/purescript-tidy#readme",
-  "devDependencies": {
-    "purescript": "^0.14.3"
-  }
+  "homepage": "https://github.com/natefaubion/purescript-tidy#readme"
 }
