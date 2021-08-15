@@ -1,7 +1,9 @@
 { name = "purescript-tidy-script"
 , dependencies =
   [ "arrays"
+  , "console"
   , "effect"
+  , "exceptions"
   , "maybe"
   , "node-buffer"
   , "node-child-process"
@@ -10,6 +12,7 @@
   , "node-process"
   , "prelude"
   , "strings"
+  , "unsafe-coerce"
   ]
 , packages = ../packages.dhall
 , sources = [ "script/**/*.purs"  ]
