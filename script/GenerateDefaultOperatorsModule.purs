@@ -8,12 +8,16 @@ import Data.Maybe (Maybe(..))
 import Data.String (Pattern(..))
 import Data.String as String
 import Effect (Effect)
+import Effect.Class.Console as Console
+import Effect.Exception (catchException, throwException)
+import Node.Buffer (Buffer)
 import Node.Buffer as Buffer
 import Node.ChildProcess as ChildProcess
 import Node.Encoding (Encoding(..))
 import Node.FS.Sync (writeTextFile)
 import Node.Path as Path
 import Node.Process (cwd)
+import Unsafe.Coerce (unsafeCoerce)
 
 foreign import tmpdir :: String -> Effect String
 
@@ -23,11 +27,19 @@ main = do
   tmpPath <- tmpdir "purs-tidy-generate-default-operators-"
 
   let opts = ChildProcess.defaultExecSyncOptions { cwd = Just tmpPath }
-  let genCmd = "node -e \"require('" <> cwdPath <> "/output/Main/index.js').main()\" generate-operators '.spago/*/*/src/**/*.purs'"
+  let genCmd = Path.concat [ cwdPath, "bin", "index.js" ] <> " generate-operators '.spago/*/*/src/**/*.purs'"
 
   writeTextFile UTF8 (Path.concat [ tmpPath, "spago.dhall" ]) defaultSpagoDhall
   _ <- ChildProcess.execSync "spago install" opts
-  output <- Buffer.toString UTF8 =<< ChildProcess.execSync genCmd opts
+  output <- Buffer.toString UTF8 =<< catchException
+    ( \err -> do
+        stdout <- Buffer.toString UTF8 ((unsafeCoerce err).stdout :: Buffer)
+        stderr <- Buffer.toString UTF8 ((unsafeCoerce err).stderr :: Buffer)
+        Console.log stdout
+        Console.error stderr
+        throwException err
+    )
+    (ChildProcess.execSync genCmd opts)
 
   let
     header =
@@ -165,7 +177,7 @@ defaultSpagoDhall =
     , "uri"
     , "validation"
     ]
-  , packages = https://github.com/purescript/package-sets/releases/download/psc-0.14.0-20210304/packages.dhall sha256:c88151fe7c05f05290224c9c1ae4a22905060424fb01071b691d3fe2e5bad4ca
+  , packages = https://github.com/purescript/package-sets/releases/download/psc-0.14.3-20210811/packages.dhall sha256:a2de7ef2f2e753733eddfa90573a82da0c7c61d46fa87d015b7f15ef8a6e97d5
   , sources = [] : List Text
   }
 """
