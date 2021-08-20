@@ -67,8 +67,25 @@ $ purs-tidy generate-config --arrow-first --unicode-never --operators .tidyopera
 
 ## Editor Support
 
+* [Spacemacs](#spacemacs)
 * [Vim](#vim)
 * [VS Code](#vs-code)
+
+### Spacemacs
+
+[Spacemacs' Purescript layer](https://github.com/syl20bnr/spacemacs/tree/develop/layers/%2Blang/purescript)
+supports formatting using purs-tidy out of the box.
+
+You can run the formatter manually with either `M-x spacemacs/purescript-format` or with the shortcut `SPC m =`.
+
+To enable automatic formatting of the buffer on save, enable `purescript-fmt-on-save` in your spacemacs config:
+
+```elisp
+  (setq-default dotspacemacs-configuration-layers '(
+    (purescript :variables
+                purescript-fmt-on-save t)))
+```
+
 
 ### Vim
 
