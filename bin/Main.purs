@@ -183,6 +183,7 @@ main = launchAff_ do
 
         FormatInPlace mode cliOptions configOption numThreads printTiming globs -> do
           currentDir <- liftEffect Process.cwd
+          srcLocation <- fold <$> liftEffect (Process.lookupEnv "TIDY_INSTALL_LOC")
           files <- expandGlobs globs
           filesWithOptions <- flip evalStateT Map.empty do
             for files \filePath -> do
@@ -209,15 +210,17 @@ main = launchAff_ do
 
           results <-
             if Array.length filesWithOptions > numThreads * 2 then do
+              -- Worker location for production bin.
+              let bundleLocation = Path.concat [ srcLocation, "bundle", "Bin.Worker", "index.js" ]
+              -- Worker location for dev.
+              let outputLocation = Path.concat [ srcLocation, "output", "Bin.Worker", "index.js" ]
               worker <-
                 oneOf
-                  [ FS.stat "./bundle/Bin.Worker/index.js" -- Worker location for production bin.
-                      $> Worker.unsafeWorkerFromPath "./bundle/Bin.Worker/index.js"
-                  , FS.stat "./output/Bin.Worker/index.js" -- Worker location for dev.
-                      $> Worker.unsafeWorkerFromPathAndExport
-                        { filePath: "./output/Bin.Worker/index.js"
-                        , export: "main"
-                        }
+                  [ FS.stat bundleLocation $> Worker.unsafeWorkerFromPath bundleLocation
+                  , FS.stat outputLocation $> Worker.unsafeWorkerFromPathAndExport
+                      { filePath: outputLocation
+                      , export: "main"
+                      }
                   ]
                   <|> throwError (error "Worker not found")
               poolTraverse worker workerData numThreads filesWithOptions
