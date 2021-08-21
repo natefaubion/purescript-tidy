@@ -27,6 +27,7 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Monoid (guard)
 import Data.Newtype (unwrap)
+import Data.Number.Format as NF
 import Data.Set as Set
 import Data.String (Pattern(..))
 import Data.String as String
@@ -69,7 +70,7 @@ data ConfigOption
 data Command
   = GenerateOperators (Array String)
   | GenerateRc FormatOptions
-  | FormatInPlace FormatMode FormatOptions ConfigOption Int (Array String)
+  | FormatInPlace FormatMode FormatOptions ConfigOption Int Boolean (Array String)
   | Format FormatOptions ConfigOption
 
 rcFileName :: String
@@ -95,6 +96,7 @@ parser =
             <$> formatOptions
             <*> configOption
             <*> workerOptions
+            <*> timingOption
             <*> pursGlobs
             <* Arg.flagHelp
     , Arg.command [ "format" ]
@@ -111,6 +113,7 @@ parser =
             <$> formatOptions
             <*> configOption
             <*> workerOptions
+            <*> timingOption
             <*> pursGlobs
             <* Arg.flagHelp
     ]
@@ -140,6 +143,12 @@ parser =
           $> Ignore
       ]
       # Arg.default Prefer
+
+  timingOption =
+    Arg.flag [ "--timing" ]
+      "Print the time spent formatting each file."
+      # Arg.boolean
+      # Arg.default false
 
 main :: Effect Unit
 main = launchAff_ do
@@ -172,7 +181,8 @@ main = launchAff_ do
             let contents = Json.stringifyWithIndent 2 $ FormatOptions.toJson cliOptions
             FS.writeTextFile UTF8 rcFileName $ contents <> "\n"
 
-        FormatInPlace mode cliOptions configOption numThreads globs -> do
+        FormatInPlace mode cliOptions configOption numThreads printTiming globs -> do
+          currentDir <- liftEffect Process.cwd
           files <- expandGlobs globs
           filesWithOptions <- flip evalStateT Map.empty do
             for files \filePath -> do
@@ -220,6 +230,16 @@ main = launchAff_ do
                 { errors: guard (not String.null error) [ filePath /\ error ]
                 , notFormatted: guard (not alreadyFormatted) [ filePath ]
                 }
+
+          when printTiming do
+            for_ (Array.sortBy (comparing _.timing) results) \{ filePath, timing } ->
+              when (timing > 0.0) do
+                Console.log $ fold
+                  [ Path.relative currentDir filePath
+                  , " "
+                  , NF.toStringWith (NF.fixed 2) timing
+                  , "ms"
+                  ]
 
           case mode of
             Write ->
