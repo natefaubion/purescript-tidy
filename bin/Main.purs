@@ -232,9 +232,14 @@ main = launchAff_ do
                 }
 
           when printTiming do
-            for_ (Array.sortBy (comparing _.timing) results) \{ error, filePath, timing } -> do
-              when (error == "") do
-                Console.log $ (Path.relative currentDir filePath) <> " " <> NF.toStringWith (NF.fixed 2) timing <> "ms"
+            for_ (Array.sortBy (comparing _.timing) results) \{ filePath, timing } ->
+              when (timing > 0.0) do
+                Console.log $ fold
+                  [ Path.relative currentDir filePath
+                  , " "
+                  , NF.toStringWith (NF.fixed 2) timing
+                  , "ms"
+                  ]
 
           case mode of
             Write ->
