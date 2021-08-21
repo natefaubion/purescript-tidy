@@ -25,7 +25,7 @@ jobs:
             output
 
       - name: Build source
-        run: spago build
+        run: npm run bundle
 
       - name: Build script
         run: spago --config script/spago.dhall build
