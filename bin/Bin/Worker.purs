@@ -5,15 +5,18 @@ import Prelude
 import Bin.FormatOptions (FormatOptions)
 import Bin.FormatOptions as FormatOptions
 import Bin.Operators (parseOperatorTable)
+import Bin.Timing (hrtime, hrtimeDiff, toMilliseconds)
 import Data.Either (Either(..), either, fromRight')
 import Data.Lazy (Lazy)
 import Data.Lazy as Lazy
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Monoid (power)
+import Data.Newtype (unwrap)
 import Dodo as Dodo
 import Effect (Effect)
 import Effect.Aff (Aff, runAff_, throwError)
+import Effect.Class (liftEffect)
 import Foreign.Object (Object)
 import Foreign.Object as Object
 import Node.Encoding (Encoding(..))
@@ -61,6 +64,7 @@ type WorkerOutput =
   { filePath :: FilePath
   , error :: String
   , alreadyFormatted :: Boolean
+  , timing :: Number
   }
 
 formatCommand :: FormatOptions -> PrecedenceMap -> String -> Either ParseError String
@@ -116,16 +120,18 @@ formatInPlaceCommand shouldCheck operators { filePath, config } = do
       , width: Just config.width
       }
   contents <- FS.readTextFile UTF8 filePath
+  start <- liftEffect hrtime
   case formatCommand formatOptions operators contents of
-    Right formatted ->
+    Right formatted -> do
+      timing <- map (unwrap <<< toMilliseconds) $ liftEffect $ hrtimeDiff start
       if shouldCheck then do
         let alreadyFormatted = formatted == contents
-        pure { filePath, error: "", alreadyFormatted }
+        pure { filePath, error: "", alreadyFormatted, timing }
       else do
         FS.writeTextFile UTF8 filePath formatted
-        pure { filePath, error: "", alreadyFormatted: false }
+        pure { filePath, error: "", alreadyFormatted: false, timing }
     Left err ->
-      pure { filePath, error: printParseError err, alreadyFormatted: false }
+      pure { filePath, error: printParseError err, alreadyFormatted: false, timing: zero }
 
 main :: Effect Unit
 main = Worker.makeAsMain \{ receive, reply, workerData: { shouldCheck, operatorsByPath } } -> do
