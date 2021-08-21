@@ -8,14 +8,16 @@ import Bin.FormatOptions (FormatOptions, formatOptions)
 import Bin.FormatOptions as FormatOptions
 import Bin.Operators (getModuleName, parseOperatorTable, resolveOperatorExports)
 import Bin.Version (version)
+import Bin.Worker (WorkerData, WorkerInput, WorkerOutput, formatCommand, formatInPlaceCommand, toWorkerConfig)
 import Control.Monad.State (evalStateT, lift)
 import Control.Monad.State as State
 import Control.Parallel (parTraverse)
+import Control.Plus ((<|>))
 import Data.Argonaut.Core as Json
 import Data.Argonaut.Decode (parseJson, printJsonDecodeError)
 import Data.Array as Array
-import Data.Either (Either(..), fromRight')
-import Data.Foldable (fold, foldMap, foldl, for_)
+import Data.Either (Either(..))
+import Data.Foldable (fold, foldMap, foldl, for_, oneOf)
 import Data.Lazy (Lazy)
 import Data.Lazy as Lazy
 import Data.List (List)
@@ -23,7 +25,7 @@ import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
-import Data.Monoid (guard, power)
+import Data.Monoid (guard)
 import Data.Newtype (unwrap)
 import Data.Set as Set
 import Data.String (Pattern(..))
@@ -32,7 +34,6 @@ import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested ((/\))
 import DefaultOperators (defaultOperators)
-import Dodo as Dodo
 import Effect (Effect)
 import Effect.Aff (Aff, error, launchAff_, makeAff, throwError, try)
 import Effect.Class (liftEffect)
@@ -44,22 +45,18 @@ import Node.Buffer as Buffer
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff as FS
 import Node.FS.Stats as Stats
-import Node.FS.Sync as Sync
 import Node.Glob.Basic (expandGlobsCwd, expandGlobsWithStatsCwd)
 import Node.Path (FilePath)
 import Node.Path as Path
 import Node.Process (cwd)
 import Node.Process as Process
 import Node.Stream as Stream
-import Node.WorkerBees (Worker)
 import Node.WorkerBees as Worker
 import Node.WorkerBees.Aff.Pool (poolTraverse)
-import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST (RecoveredParserResult(..), parseModule, toRecovered)
-import PureScript.CST.Errors (ParseError, printParseError)
+import PureScript.CST.Errors (printParseError)
 import PureScript.CST.ModuleGraph (ModuleSort(..), sortModules)
-import PureScript.CST.Tidy (defaultFormatOptions, formatModule, toDoc)
-import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), PrecedenceMap, remapOperators)
+import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), PrecedenceMap)
 
 data FormatMode = Check | Write
 derive instance Eq FormatMode
@@ -200,7 +197,22 @@ main = launchAff_ do
               , operatorsByPath
               }
 
-          results <- poolTraverse formatWorker workerData numThreads filesWithOptions
+          results <-
+            if Array.length filesWithOptions > numThreads * 2 then do
+              worker <-
+                oneOf
+                  [ FS.stat "./bundle/Bin.Worker/index.js" -- Worker location for production bin.
+                      $> Worker.unsafeWorkerFromPath "./bundle/Bin.Worker/index.js"
+                  , FS.stat "./output/Bin.Worker/index.js" -- Worker location for dev.
+                      $> Worker.unsafeWorkerFromPathAndExport
+                        { filePath: "./output/Bin.Worker/index.js"
+                        , export: "main"
+                        }
+                  ]
+                  <|> throwError (error "Worker not found")
+              poolTraverse worker workerData numThreads filesWithOptions
+            else
+              parTraverse (formatInPlaceOne workerData) filesWithOptions
 
           let
             { errors, notFormatted } =
@@ -276,117 +288,19 @@ readOperatorTable path
   | path == ".tidyoperators.default" = pure defaultOperators
   | otherwise = String.split (Pattern "\n") <$> FS.readTextFile UTF8 path
 
-formatCommand :: FormatOptions -> PrecedenceMap -> String -> Either ParseError String
-formatCommand args operators contents = do
-  let
-    print = Dodo.print Dodo.plainText
-      { pageWidth: fromMaybe top args.width
-      , ribbonRatio: args.ribbon
-      , indentWidth: args.indent
-      , indentUnit: power " " args.indent
-      }
-
-  case parseModule contents of
-    ParseSucceeded ok -> do
-      let
-        opts = defaultFormatOptions
-          { importWrap = args.importWrap
-          , operators = remapOperators operators ok
-          , typeArrowPlacement = args.typeArrowPlacement
-          , unicode = args.unicode
-          }
-      Right $ print $ toDoc $ formatModule opts ok
-    ParseSucceededWithErrors ok _ -> do
-      let
-        opts =
-          defaultFormatOptions
-            { importWrap = args.importWrap
-            , operators = remapOperators operators ok
-            , typeArrowPlacement = args.typeArrowPlacement
-            , unicode = args.unicode
-            }
-      Right $ print $ toDoc $ formatModule opts ok
-    ParseFailed err ->
-      Left err.error
-
-type WorkerConfig =
-  { importWrap :: String
-  , indent :: Int
-  , operatorsFile :: String
-  , ribbon :: Number
-  , typeArrowPlacement :: String
-  , unicode :: String
-  , width :: Int
-  }
-
-toWorkerConfig :: FormatOptions -> WorkerConfig
-toWorkerConfig options =
-  { importWrap: FormatOptions.importWrapToString options.importWrap
-  , indent: options.indent
-  , operatorsFile: fromMaybe ".tidyoperators.default" options.operatorsFile
-  , ribbon: options.ribbon
-  , typeArrowPlacement: FormatOptions.typeArrowPlacementToString options.typeArrowPlacement
-  , unicode: FormatOptions.unicodeToString options.unicode
-  , width: fromMaybe top options.width
-  }
-
-type WorkerData =
-  { shouldCheck :: Boolean
-  , operatorsByPath :: Object (Array String)
-  }
-
-type WorkerInput =
-  { filePath :: FilePath
-  , config :: WorkerConfig
-  }
-
-type WorkerOutput =
-  { filePath :: FilePath
-  , error :: String
-  , alreadyFormatted :: Boolean
-  }
-
-formatWorker :: Worker WorkerData WorkerInput WorkerOutput
-formatWorker = Worker.make \{ receive, reply, workerData: { shouldCheck, operatorsByPath } } -> do
+formatInPlaceOne :: WorkerData -> WorkerInput -> Aff WorkerOutput
+formatInPlaceOne { shouldCheck, operatorsByPath } input@{ config } = do
   let
     parsedOperatorsByPath :: Object (Lazy PrecedenceMap)
     parsedOperatorsByPath =
       (\operators -> Lazy.defer \_ -> parseOperatorTable operators) <$> operatorsByPath
 
-  receive \{ filePath, config } -> do
-    let
-      operators :: PrecedenceMap
-      operators =
-        maybe Map.empty Lazy.force $ Object.lookup config.operatorsFile parsedOperatorsByPath
+  let
+    operators :: PrecedenceMap
+    operators =
+      maybe Map.empty Lazy.force $ Object.lookup config.operatorsFile parsedOperatorsByPath
 
-      formatOptions :: FormatOptions
-      formatOptions =
-        { importWrap:
-            fromRight' (\_ -> unsafeCrashWith "Unknown importWrap value") do
-              FormatOptions.importWrapFromString config.importWrap
-        , indent: config.indent
-        , operatorsFile: Nothing
-        , ribbon: config.ribbon
-        , typeArrowPlacement:
-            fromRight' (\_ -> unsafeCrashWith "Unknown typeArrowPlacement value") do
-              FormatOptions.typeArrowPlacementFromString config.typeArrowPlacement
-        , unicode:
-            fromRight' (\_ -> unsafeCrashWith "Unknown unicode value") do
-              FormatOptions.unicodeFromString config.unicode
-        , width: Just config.width
-        }
-
-    contents <- Sync.readTextFile UTF8 filePath
-    case formatCommand formatOptions operators contents of
-      Right formatted ->
-        if shouldCheck then do
-          let alreadyFormatted = formatted == contents
-          reply { filePath, error: "", alreadyFormatted }
-        else do
-          Sync.writeTextFile UTF8 filePath formatted
-          reply { filePath, error: "", alreadyFormatted: false }
-      Left err ->
-        reply { filePath, error: printParseError err, alreadyFormatted: false }
+  formatInPlaceCommand shouldCheck operators input
 
 type RcMap = Map FilePath (Maybe FormatOptions)
 
