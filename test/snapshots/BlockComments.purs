@@ -18,3 +18,13 @@ test =
     test
 test -}
             42
+
+test =
+        {-
+            test
+
+            test
+
+            test
+        -}
+        42

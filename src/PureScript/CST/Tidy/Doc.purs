@@ -30,11 +30,13 @@ module PureScript.CST.Tidy.Doc
 
 import Prelude
 
+import Control.Alternative (guard)
 import Data.Array as Array
-import Data.Foldable (class Foldable, foldMap, foldl)
+import Data.Foldable (class Foldable, foldMap, foldl, intercalate)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Monoid (power)
 import Data.String as String
+import Data.String.CodeUnits as SCU
 import Data.Tuple (Tuple(..))
 import Dodo (Doc)
 import Dodo as Dodo
@@ -76,7 +78,11 @@ blockComment = splitLines >>> Array.uncons >>> foldMap \{ head, tail } -> do
   let
     prefixSpaces =
       tail
-        # map (String.length <<< String.takeWhile (eq (String.codePointFromChar ' ')))
+        # Array.mapMaybe
+          ( \str -> do
+              let spaces = SCU.length $ String.takeWhile (eq (String.codePointFromChar ' ')) str
+              guard (spaces < SCU.length str) $> spaces
+          )
         # Array.sort
         # Array.head
   case prefixSpaces of
@@ -100,7 +106,7 @@ blockComment = splitLines >>> Array.uncons >>> foldMap \{ head, tail } -> do
                       }
                   else prev
               )
-              (Dodo.lines tailDocs)
+              (intercalate Dodo.break tailDocs)
           ]
 
 anchor :: forall a. FormatDoc a -> FormatDoc a
