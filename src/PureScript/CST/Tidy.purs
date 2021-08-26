@@ -934,7 +934,7 @@ formatLetBinding conf = case _ of
   LetBindingPattern binder tok (Where { expr, bindings }) ->
     flexGroup (formatBinder conf binder)
       `space`
-        Hang.toFormatDoc (anchor (formatToken conf tok) `hang` formatHangingExpr conf expr)
+        Hang.toFormatDoc (indent (anchor (formatToken conf tok)) `hang` formatHangingExpr conf expr)
       `break`
         indent (foldMap (formatWhere conf) bindings)
 
@@ -976,7 +976,7 @@ formatDoStatement conf = case _ of
   DoBind binder tok expr ->
     flexGroup (formatBinder conf binder)
       `space` Hang.toFormatDoc do
-        anchor (formatToken conf tok) `hang` formatHangingExpr conf expr
+        indent (anchor (formatToken conf tok)) `hang` formatHangingExpr conf expr
   DoError e ->
     conf.formatError e
 

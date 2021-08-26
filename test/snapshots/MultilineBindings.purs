@@ -1,0 +1,54 @@
+module MultilineBindings where
+
+test = ok
+  [ a
+  , b
+  , c
+  ]
+
+test = do
+  let test = ok
+             [ a
+             , b
+             , c
+             ]
+  test
+
+test = ado
+  let test = ok
+             [ a
+             , b
+             , c
+             ]
+  in test
+
+test = do
+  test <- ok
+          [ a
+          , b
+          , c
+          ]
+  test
+
+test = ado
+  test <- ok
+          [ a
+          , b
+          , c
+          ]
+  in test
+
+test = case _ of
+  Test -> ok
+          [ a
+          , b
+          , c
+          ]
+
+test = case _ of
+  Test
+    | true -> ok
+              [ a
+              , b
+              , c
+              ]
