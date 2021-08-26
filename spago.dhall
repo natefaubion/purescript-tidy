@@ -1,6 +1,7 @@
 { name = "purescript-tidy"
 , dependencies =
   [ "arrays"
+  , "control"
   , "dodo-printer"
   , "foldable-traversable"
   , "lists"
