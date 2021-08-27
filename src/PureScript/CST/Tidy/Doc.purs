@@ -16,6 +16,7 @@ module PureScript.CST.Tidy.Doc
   , softBreak
   , spaceBreak
   , sourceBreak
+  , forceMinSourceBreaks
   , space
   , softSpace
   , flexSpaceBreak
@@ -157,6 +158,12 @@ sourceBreak m = case _ of
     | otherwise -> FormatDoc ForceNone m false mempty ForceNone
   FormatDoc fl n multi doc fr ->
     FormatDoc fl (m + n) multi doc fr
+
+forceMinSourceBreaks :: forall a. Int -> FormatDoc a -> FormatDoc a
+forceMinSourceBreaks m = case _ of
+  FormatEmpty -> FormatEmpty
+  FormatDoc fl n multi doc fr ->
+    FormatDoc fl (max m n) multi doc fr
 
 space :: forall a. FormatDocOperator a
 space = joinDoc (force (append Dodo.space))

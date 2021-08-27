@@ -30,7 +30,7 @@ import Data.Tuple (Tuple(..), fst)
 import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
+import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
 import PureScript.CST.Tidy.Doc (FormatDoc, toDoc) as Exports
 import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp, hangOps, hangWithIndent)
 import PureScript.CST.Tidy.Hang as Hang
@@ -181,17 +181,31 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
             anchor (foldMap (formatParenListNonEmpty NotGrouped formatExport conf) header.exports)
           `space`
             anchor (formatToken conf header."where")
-    , case conf.importWrap of
+    , forceMinSourceBreaks 2 case conf.importWrap of
         ImportWrapAuto ->
           imports
         ImportWrapSource ->
           locally (_ { pageWidth = top, ribbonRatio = 1.0 }) imports
-    , joinWithMap break (formatDecl conf) body.decls
+    , foldMap formatDecls (Array.uncons body.decls)
     , foldr (formatComment leadingLineComment) mempty body.trailingComments
     ]
   where
   imports =
     joinWithMap break (formatImportDecl conf) header.imports
+
+  formatDecls { head, tail } =
+    forceMinSourceBreaks 2 (formatDecl conf head) `break` joinWithMap break
+      ( \decl -> do
+          let
+            formattedDecl = formatDecl conf decl
+            needsBreak = case decl of
+              DeclKindSignature _ _ -> true
+              DeclSignature _ -> true
+              _ -> false
+          if needsBreak then forceMinSourceBreaks 2 formattedDecl
+          else formattedDecl
+      )
+      tail
 
 formatExport :: forall e a. Format (Export e) e a
 formatExport conf = case _ of
@@ -797,7 +811,7 @@ formatHangingExpr conf = case _ of
   ExprLet letIn ->
     hangBreak $ formatToken conf letIn.keyword
       `spaceBreak`
-        indent (joinWithMap break (formatLetBinding conf) letIn.bindings)
+        indent (formatLetBindings conf letIn.bindings)
       `spaceBreak`
         (formatToken conf letIn.in `spaceBreak` indent (flexGroup (formatExpr conf letIn.body)))
 
@@ -923,7 +937,21 @@ formatPatternGuard conf (PatternGuard { binder, expr }) = case binder of
 formatWhere :: forall e a. Format (Tuple SourceToken (NonEmptyArray (LetBinding e))) e a
 formatWhere conf (Tuple kw bindings) =
   formatToken conf kw
-    `break` joinWithMap break (flexGroup <<< formatLetBinding conf) bindings
+    `break` formatLetBindings conf bindings
+
+formatLetBindings :: forall e a. Format (NonEmptyArray (LetBinding e)) e a
+formatLetBindings conf bindings =
+  flexGroup (formatLetBinding conf (NonEmptyArray.head bindings)) `break` joinWithMap break
+    ( \binding -> do
+        let
+          formattedBinding = flexGroup (formatLetBinding conf binding)
+          needsBreak = case binding of
+            LetBindingSignature _ -> true
+            _ -> false
+        if needsBreak then forceMinSourceBreaks 2 formattedBinding
+        else formattedBinding
+    )
+    (NonEmptyArray.tail bindings)
 
 formatLetBinding :: forall e a. Format (LetBinding e) e a
 formatLetBinding conf = case _ of
@@ -969,8 +997,7 @@ formatDoStatement :: forall e a. Format (DoStatement e) e a
 formatDoStatement conf = case _ of
   DoLet kw bindings ->
     formatToken conf kw
-      `flexSpaceBreak`
-        indent (joinWithMap break (formatLetBinding conf) bindings)
+      `flexSpaceBreak` indent (formatLetBindings conf bindings)
   DoDiscard expr ->
     formatExpr conf expr
   DoBind binder tok expr ->
