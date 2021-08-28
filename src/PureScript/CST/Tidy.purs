@@ -89,10 +89,12 @@ instance formatErrorRecoveredError :: FormatError RecoveredError where
                   head' =
                     Dodo.text (printToken UnicodeSource head.value)
                       <> formatRecoveredComments nextIndent head.trailingComments
+
                   init' = init # foldMap \tok ->
                     formatRecoveredComments nextIndent tok.leadingComments
                       <> Dodo.text (printToken UnicodeSource tok.value)
                       <> formatRecoveredComments nextIndent tok.trailingComments
+
                   last' =
                     formatRecoveredComments nextIndent last.leadingComments
                       <> Dodo.text (printToken UnicodeSource last.value)
