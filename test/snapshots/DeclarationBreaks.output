@@ -24,7 +24,6 @@ test = 42
   where
   a =
     1
-
   b = 2
 
   c :: Int
@@ -32,7 +31,6 @@ test = 42
     let
       d :: Int
       d = 3
-
       e = 4
     in
       do
@@ -80,7 +78,6 @@ test = 42
   where
   a =
     1
-
   b = 2
 
   c :: Int
@@ -88,7 +85,6 @@ test = 42
     let
       d :: Int
       d = 3
-
       e = 4
     in
       do

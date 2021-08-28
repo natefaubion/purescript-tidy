@@ -189,27 +189,12 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
           imports
         ImportWrapSource ->
           locally (_ { pageWidth = top, ribbonRatio = 1.0 }) imports
-    , forceMinSourceBreaks 2 $ formatDeclGroups declGroup formatDecl conf body.decls
+    , forceMinSourceBreaks 2 $ formatTopLevelGroups conf body.decls
     , foldr (formatComment leadingLineComment) mempty body.trailingComments
     ]
   where
   imports =
     joinWithMap break (formatImportDecl conf) header.imports
-
-  declGroup = case _ of
-    DeclData { name: Name { name } } _ -> DeclGroupType name
-    DeclType { name: Name { name } } _ _ -> DeclGroupType name
-    DeclNewtype { name: Name { name } } _ _ _ -> DeclGroupType name
-    DeclClass { name: Name { name } } _ -> DeclGroupClass name
-    DeclKindSignature _ (Labeled { label: Name { name } }) -> DeclGroupTypeSignature name
-    DeclSignature (Labeled { label: Name { name } }) -> DeclGroupValueSignature name
-    DeclValue { name: Name { name } } -> DeclGroupValue name
-    DeclInstanceChain _ -> DeclGroupInstance
-    DeclDerive _ _ _ -> DeclGroupInstance
-    DeclFixity _ -> DeclGroupFixity
-    DeclForeign _ _ _ -> DeclGroupForeign
-    DeclRole _ _ _ _ -> DeclGroupRole
-    DeclError _ -> DeclGroupUnknown
 
 formatExport :: forall e a. Format (Export e) e a
 formatExport conf = case _ of
@@ -815,7 +800,7 @@ formatHangingExpr conf = case _ of
   ExprLet letIn ->
     hangBreak $ formatToken conf letIn.keyword
       `spaceBreak`
-        indent (formatLetBindings conf letIn.bindings)
+        indent (formatLetGroups conf (NonEmptyArray.toArray letIn.bindings))
       `spaceBreak`
         (formatToken conf letIn.in `spaceBreak` indent (flexGroup (formatExpr conf letIn.body)))
 
@@ -941,16 +926,7 @@ formatPatternGuard conf (PatternGuard { binder, expr }) = case binder of
 formatWhere :: forall e a. Format (Tuple SourceToken (NonEmptyArray (LetBinding e))) e a
 formatWhere conf (Tuple kw bindings) =
   formatToken conf kw
-    `break` formatLetBindings conf bindings
-
-formatLetBindings :: forall e a. Format (NonEmptyArray (LetBinding e)) e a
-formatLetBindings conf = formatDeclGroups letGroup formatLetBinding conf <<< NonEmptyArray.toArray
-  where
-  letGroup = case _ of
-    LetBindingSignature (Labeled { label: Name { name } }) -> DeclGroupValueSignature name
-    LetBindingName { name: Name { name } } -> DeclGroupValue name
-    LetBindingPattern _ _ _ -> DeclGroupUnknown
-    LetBindingError _ -> DeclGroupUnknown
+    `break` formatLetGroups conf (NonEmptyArray.toArray bindings)
 
 formatLetBinding :: forall e a. Format (LetBinding e) e a
 formatLetBinding conf = case _ of
@@ -996,7 +972,7 @@ formatDoStatement :: forall e a. Format (DoStatement e) e a
 formatDoStatement conf = case _ of
   DoLet kw bindings ->
     formatToken conf kw
-      `flexSpaceBreak` indent (formatLetBindings conf bindings)
+      `flexSpaceBreak` indent (formatLetGroups conf (NonEmptyArray.toArray bindings))
   DoDiscard expr ->
     formatExpr conf expr
   DoBind binder tok expr ->
@@ -1190,37 +1166,73 @@ data DeclGroupSeparator
   | DeclGroupHard
   | DeclGroupSoft
 
-declGroupSeparator :: DeclGroup -> DeclGroup -> DeclGroupSeparator
-declGroupSeparator = case _, _ of
-  DeclGroupValue a, DeclGroupValue b ->
-    if a == b then DeclGroupSame
-    else DeclGroupSoft
-  DeclGroupValueSignature a, DeclGroupValue b ->
-    if a == b then DeclGroupSame
-    else DeclGroupHard
-  _, DeclGroupValueSignature _ -> DeclGroupHard
-  DeclGroupType _, DeclGroupType _ -> DeclGroupSoft
-  DeclGroupTypeSignature a, DeclGroupType b ->
-    if a == b then DeclGroupSame
-    else DeclGroupHard
-  DeclGroupTypeSignature a, DeclGroupClass b ->
-    if a == b then DeclGroupSame
-    else DeclGroupHard
-  _, DeclGroupTypeSignature _ -> DeclGroupHard
-  DeclGroupClass _, DeclGroupClass _ -> DeclGroupSoft
-  _, DeclGroupClass _ -> DeclGroupHard
-  DeclGroupInstance, DeclGroupInstance -> DeclGroupSoft
-  _, DeclGroupInstance -> DeclGroupHard
-  DeclGroupFixity, DeclGroupFixity -> DeclGroupSoft
-  _, DeclGroupFixity -> DeclGroupHard
-  DeclGroupForeign, DeclGroupForeign -> DeclGroupSoft
-  _, DeclGroupForeign -> DeclGroupHard
-  DeclGroupRole, DeclGroupRole -> DeclGroupSoft
-  _, DeclGroupRole -> DeclGroupHard
-  _, _ -> DeclGroupSoft
+formatTopLevelGroups :: forall e a. Format (Array (Declaration e)) e a
+formatTopLevelGroups = formatDeclGroups topDeclGroupSeparator topDeclGroup formatDecl
+  where
+  topDeclGroupSeparator = case _, _ of
+    DeclGroupValue a, DeclGroupValue b ->
+      if a == b then DeclGroupSame
+      else DeclGroupSoft
+    DeclGroupValueSignature a, DeclGroupValue b ->
+      if a == b then DeclGroupSame
+      else DeclGroupHard
+    _, DeclGroupValueSignature _ -> DeclGroupHard
+    DeclGroupType _, DeclGroupType _ -> DeclGroupSoft
+    DeclGroupTypeSignature a, DeclGroupType b ->
+      if a == b then DeclGroupSame
+      else DeclGroupHard
+    DeclGroupTypeSignature a, DeclGroupClass b ->
+      if a == b then DeclGroupSame
+      else DeclGroupHard
+    _, DeclGroupTypeSignature _ -> DeclGroupHard
+    DeclGroupClass _, DeclGroupClass _ -> DeclGroupSoft
+    _, DeclGroupClass _ -> DeclGroupHard
+    DeclGroupInstance, DeclGroupInstance -> DeclGroupSoft
+    _, DeclGroupInstance -> DeclGroupHard
+    DeclGroupFixity, DeclGroupFixity -> DeclGroupSoft
+    _, DeclGroupFixity -> DeclGroupHard
+    DeclGroupForeign, DeclGroupForeign -> DeclGroupSoft
+    _, DeclGroupForeign -> DeclGroupHard
+    DeclGroupRole, DeclGroupRole -> DeclGroupSoft
+    _, DeclGroupRole -> DeclGroupHard
+    _, _ -> DeclGroupSoft
 
-formatDeclGroups :: forall e a b. (b -> DeclGroup) -> Format b e a -> Format (Array b) e a
-formatDeclGroups k format conf = maybe mempty joinDecls <<< foldr go Nothing
+  topDeclGroup = case _ of
+    DeclData { name: Name { name } } _ -> DeclGroupType name
+    DeclType { name: Name { name } } _ _ -> DeclGroupType name
+    DeclNewtype { name: Name { name } } _ _ _ -> DeclGroupType name
+    DeclClass { name: Name { name } } _ -> DeclGroupClass name
+    DeclKindSignature _ (Labeled { label: Name { name } }) -> DeclGroupTypeSignature name
+    DeclSignature (Labeled { label: Name { name } }) -> DeclGroupValueSignature name
+    DeclValue { name: Name { name } } -> DeclGroupValue name
+    DeclInstanceChain _ -> DeclGroupInstance
+    DeclDerive _ _ _ -> DeclGroupInstance
+    DeclFixity _ -> DeclGroupFixity
+    DeclForeign _ _ _ -> DeclGroupForeign
+    DeclRole _ _ _ _ -> DeclGroupRole
+    DeclError _ -> DeclGroupUnknown
+
+formatLetGroups :: forall e a. Format (Array (LetBinding e)) e a
+formatLetGroups = formatDeclGroups letDeclGroupSeparator letGroup formatLetBinding
+  where
+  letDeclGroupSeparator = case _, _ of
+    _, DeclGroupValueSignature _ -> DeclGroupHard
+    _, _ -> DeclGroupSame
+
+  letGroup = case _ of
+    LetBindingSignature (Labeled { label: Name { name } }) -> DeclGroupValueSignature name
+    LetBindingName { name: Name { name } } -> DeclGroupValue name
+    LetBindingPattern _ _ _ -> DeclGroupUnknown
+    LetBindingError _ -> DeclGroupUnknown
+
+formatDeclGroups
+  :: forall e a b
+   . (DeclGroup -> DeclGroup -> DeclGroupSeparator)
+  -> (b -> DeclGroup)
+  -> Format b e a
+  -> Format (Array b) e a
+formatDeclGroups declSeparator k format conf =
+  maybe mempty joinDecls <<< foldr go Nothing
   where
   go decl = Just <<< case _ of
     Nothing ->
@@ -1231,7 +1243,7 @@ formatDeclGroups k format conf = maybe mempty joinDecls <<< foldr go Nothing
       }
     Just acc -> do
       let group = k decl
-      case declGroupSeparator group acc.group of
+      case declSeparator group acc.group of
         DeclGroupSame ->
           { doc: acc.doc
           , sep: acc.sep
