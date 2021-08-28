@@ -60,6 +60,7 @@ import PureScript.CST.ModuleGraph (ModuleSort(..), sortModules)
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), PrecedenceMap)
 
 data FormatMode = Check | Write
+
 derive instance Eq FormatMode
 
 data ConfigOption
