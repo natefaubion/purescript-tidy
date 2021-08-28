@@ -10,6 +10,7 @@ type Ok2 = String
 
 type Ok3 = String
 type Ok4 = Int
+
 class Foo a where
   foo :: a
 
@@ -65,6 +66,7 @@ type Ok2 = String
 
 type Ok3 = String
 type Ok4 = Int
+
 class Foo a where
   foo :: a
 
