@@ -1,13 +1,20 @@
+-- @format --width 40
 module DeclarationBreaks where
 import Foo
 import Bar
 type Ok = String
-type OK2 :: Type
+type Ok2 :: Type
 type Ok2 = String
+type Ok3 = String
+type Ok4 = Int
+class Foo a where foo :: a
+instance Foo Int where foo = 12
+else instance Foo String where foo = "foo"
 test :: Int
 test = 42
   where
-  a = 1
+  a =
+    1
   b = 2
   c :: Int
   c =
@@ -15,7 +22,15 @@ test = 42
         d = 3
         e = 4
     in do
-      let f = 5
+      let f =
+            5
           g :: Int
           g = 6
       g
+test2 Foo =
+  1
+test2 Bar =
+  2
+test2 Baz = 3
+data Wat = Wat1 | Wat2 | Wat3 | Wat4 | Wat5 | Wat6 | Wat7 | Wat8 | Wat9
+data Ohh = Ohh

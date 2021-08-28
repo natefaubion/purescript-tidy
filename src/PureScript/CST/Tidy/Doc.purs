@@ -22,6 +22,7 @@ module PureScript.CST.Tidy.Doc
   , flexSpaceBreak
   , flexSoftSpace
   , flexSoftBreak
+  , flexDoubleBreak
   , flexGroup
   , fromDoc
   , toDoc
@@ -232,6 +233,19 @@ softSpace = joinDoc \f m doc -> case f of
   ForceNone ->
     Tuple m (softSpaceDoc <> doc)
 
+-- | Warning: This is not an associative join operation, and *requires*
+-- | right associativity. You will always get double breaks when used
+-- | with left associativity.
+flexDoubleBreak :: forall a. FormatDocOperator a
+flexDoubleBreak = case _, _ of
+  FormatEmpty, b -> b
+  a, FormatEmpty -> a
+  FormatDoc fl1 n1 m1 doc1 _, FormatDoc _ n2 _ doc2 fr2
+    | n2 >= 2 || m1 ->
+        FormatDoc fl1 n1 true (doc1 <> Dodo.break <> Dodo.break <> doc2) fr2
+    | otherwise ->
+        FormatDoc fl1 n1 true (Dodo.flexSelect doc1 mempty Dodo.break <> Dodo.break <> doc2) fr2
+
 isEmpty :: forall a. FormatDoc a -> Boolean
 isEmpty = case _ of
   FormatEmpty -> true
@@ -241,9 +255,7 @@ joinDoc :: forall a. (ForceBreak -> Boolean -> Doc a -> Tuple Boolean (Doc a)) -
 joinDoc spc = case _, _ of
   FormatEmpty, b -> b
   a, FormatEmpty -> a
-  a@(FormatDoc fl1 n1 m1 doc1 fr1), b@(FormatDoc fl2 n2 m2 doc2 fr2)
-    | isEmpty a -> b
-    | isEmpty b -> a
+  FormatDoc fl1 n1 m1 doc1 fr1, FormatDoc fl2 n2 m2 doc2 fr2
     | n2 == 1 ->
         FormatDoc fl1 n1 true (doc1 <> Dodo.break <> doc2) fr2
     | n2 >= 2 ->

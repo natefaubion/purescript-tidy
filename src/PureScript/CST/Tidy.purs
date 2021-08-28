@@ -21,8 +21,9 @@ import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Foldable (foldMap, foldl, foldr)
+import Data.List.NonEmpty as NonEmptyList
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.Monoid (power)
 import Data.Monoid as Monoid
 import Data.String.CodeUnits as SCU
@@ -30,7 +31,7 @@ import Data.Tuple (Tuple(..), fst)
 import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
+import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
 import PureScript.CST.Tidy.Doc (FormatDoc, toDoc) as Exports
 import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp, hangOps, hangWithIndent)
 import PureScript.CST.Tidy.Hang as Hang
@@ -38,7 +39,7 @@ import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), 
 import PureScript.CST.Tidy.Token (UnicodeOption(..)) as Exports
 import PureScript.CST.Tidy.Token (UnicodeOption(..), printToken)
 import PureScript.CST.Tidy.Util (splitLines, splitStringEscapeLines)
-import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
+import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), Proper, QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
 
 data TypeArrowOption
   = TypeArrowFirst
@@ -186,26 +187,27 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
           imports
         ImportWrapSource ->
           locally (_ { pageWidth = top, ribbonRatio = 1.0 }) imports
-    , foldMap formatDecls (Array.uncons body.decls)
+    , forceMinSourceBreaks 2 $ formatDeclGroups declGroup formatDecl conf body.decls
     , foldr (formatComment leadingLineComment) mempty body.trailingComments
     ]
   where
   imports =
     joinWithMap break (formatImportDecl conf) header.imports
 
-  formatDecls { head, tail } =
-    forceMinSourceBreaks 2 (formatDecl conf head) `break` joinWithMap break
-      ( \decl -> do
-          let
-            formattedDecl = formatDecl conf decl
-            needsBreak = case decl of
-              DeclKindSignature _ _ -> true
-              DeclSignature _ -> true
-              _ -> false
-          if needsBreak then forceMinSourceBreaks 2 formattedDecl
-          else formattedDecl
-      )
-      tail
+  declGroup = case _ of
+    DeclData { name: Name { name } } _ -> DeclProper name false
+    DeclType { name: Name { name } } _ _ -> DeclProper name false
+    DeclNewtype { name: Name { name } } _ _ _ -> DeclProper name false
+    DeclClass { name: Name { name } } _ -> DeclProper name false
+    DeclKindSignature _ (Labeled { label: Name { name } }) -> DeclProper name true
+    DeclSignature (Labeled { label: Name { name } }) -> DeclIdent name true
+    DeclValue { name: Name { name } } -> DeclIdent name false
+    DeclInstanceChain _ -> DeclNone
+    DeclDerive _ _ _ -> DeclNone
+    DeclFixity _ -> DeclNone
+    DeclForeign _ _ _ -> DeclNone
+    DeclRole _ _ _ _ -> DeclNone
+    DeclError _ -> DeclNone
 
 formatExport :: forall e a. Format (Export e) e a
 formatExport conf = case _ of
@@ -940,18 +942,13 @@ formatWhere conf (Tuple kw bindings) =
     `break` formatLetBindings conf bindings
 
 formatLetBindings :: forall e a. Format (NonEmptyArray (LetBinding e)) e a
-formatLetBindings conf bindings =
-  flexGroup (formatLetBinding conf (NonEmptyArray.head bindings)) `break` joinWithMap break
-    ( \binding -> do
-        let
-          formattedBinding = flexGroup (formatLetBinding conf binding)
-          needsBreak = case binding of
-            LetBindingSignature _ -> true
-            _ -> false
-        if needsBreak then forceMinSourceBreaks 2 formattedBinding
-        else formattedBinding
-    )
-    (NonEmptyArray.tail bindings)
+formatLetBindings conf = formatDeclGroups letGroup formatLetBinding conf <<< NonEmptyArray.toArray
+  where
+  letGroup = case _ of
+    LetBindingSignature (Labeled { label: Name { name } }) -> DeclIdent name true
+    LetBindingName { name: Name { name } } -> DeclIdent name false
+    LetBindingPattern _ _ _ -> DeclNone
+    LetBindingError _ -> DeclNone
 
 formatLetBinding :: forall e a. Format (LetBinding e) e a
 formatLetBinding conf = case _ of
@@ -1173,3 +1170,50 @@ commentedFlexGroup tok spc conf doc =
   formatWithComments tok.leadingComments [] $ flexGroup do
     formatToken conf (tok { leadingComments = [] })
       `spc` doc
+
+data DeclGroup
+  = DeclNone
+  | DeclIdent Ident Boolean
+  | DeclProper Proper Boolean
+
+formatDeclGroups :: forall e a b. (b -> DeclGroup) -> Format b e a -> Format (Array b) e a
+formatDeclGroups k format conf = maybe mempty (joinDecls true) <<< foldr go Nothing
+  where
+  shouldGroup = case _, _ of
+    DeclIdent a _, DeclIdent b _ -> a == b
+    DeclProper a _, DeclProper b _ -> a == b
+    _, _ -> false
+
+  isSignature = case _ of
+    DeclIdent _ b -> b
+    DeclProper _ b -> b
+    _ -> false
+
+  go decl = Just <<< case _ of
+    Nothing ->
+      { doc: mempty
+      , group: k decl
+      , decls: NonEmptyList.singleton decl
+      }
+    Just acc -> do
+      let group = k decl
+      if shouldGroup group acc.group then
+        { doc: acc.doc
+        , group
+        , decls: NonEmptyList.cons decl acc.decls
+        }
+      else
+        { doc: joinDecls false acc
+        , group
+        , decls: NonEmptyList.singleton decl
+        }
+
+  joinDecls isHead acc =
+    if isSignature acc.group && not isHead then
+      forceMinSourceBreaks 2 newDoc
+    else
+      newDoc
+    where
+    newDoc =
+      joinWithMap break (format conf) acc.decls
+        `flexDoubleBreak` acc.doc
