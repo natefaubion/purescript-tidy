@@ -21,8 +21,9 @@ import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Foldable (foldMap, foldl, foldr)
+import Data.List.NonEmpty as NonEmptyList
 import Data.Map as Map
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), maybe)
 import Data.Monoid (power)
 import Data.Monoid as Monoid
 import Data.String.CodeUnits as SCU
@@ -30,7 +31,7 @@ import Data.Tuple (Tuple(..), fst)
 import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexGroup, flexSoftBreak, flexSpaceBreak, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
+import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
 import PureScript.CST.Tidy.Doc (FormatDoc, toDoc) as Exports
 import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp, hangOps, hangWithIndent)
 import PureScript.CST.Tidy.Hang as Hang
@@ -38,7 +39,7 @@ import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), 
 import PureScript.CST.Tidy.Token (UnicodeOption(..)) as Exports
 import PureScript.CST.Tidy.Token (UnicodeOption(..), printToken)
 import PureScript.CST.Tidy.Util (splitLines, splitStringEscapeLines)
-import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
+import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), Proper, QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
 
 data TypeArrowOption
   = TypeArrowFirst
@@ -181,12 +182,12 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
             anchor (foldMap (formatParenListNonEmpty NotGrouped formatExport conf) header.exports)
           `space`
             anchor (formatToken conf header."where")
-    , case conf.importWrap of
+    , forceMinSourceBreaks 2 case conf.importWrap of
         ImportWrapAuto ->
           imports
         ImportWrapSource ->
           locally (_ { pageWidth = top, ribbonRatio = 1.0 }) imports
-    , joinWithMap break (formatDecl conf) body.decls
+    , forceMinSourceBreaks 2 $ formatTopLevelGroups conf body.decls
     , foldr (formatComment leadingLineComment) mempty body.trailingComments
     ]
   where
@@ -797,7 +798,7 @@ formatHangingExpr conf = case _ of
   ExprLet letIn ->
     hangBreak $ formatToken conf letIn.keyword
       `spaceBreak`
-        indent (joinWithMap break (formatLetBinding conf) letIn.bindings)
+        indent (formatLetGroups conf (NonEmptyArray.toArray letIn.bindings))
       `spaceBreak`
         (formatToken conf letIn.in `spaceBreak` indent (flexGroup (formatExpr conf letIn.body)))
 
@@ -923,7 +924,7 @@ formatPatternGuard conf (PatternGuard { binder, expr }) = case binder of
 formatWhere :: forall e a. Format (Tuple SourceToken (NonEmptyArray (LetBinding e))) e a
 formatWhere conf (Tuple kw bindings) =
   formatToken conf kw
-    `break` joinWithMap break (flexGroup <<< formatLetBinding conf) bindings
+    `break` formatLetGroups conf (NonEmptyArray.toArray bindings)
 
 formatLetBinding :: forall e a. Format (LetBinding e) e a
 formatLetBinding conf = case _ of
@@ -969,8 +970,7 @@ formatDoStatement :: forall e a. Format (DoStatement e) e a
 formatDoStatement conf = case _ of
   DoLet kw bindings ->
     formatToken conf kw
-      `flexSpaceBreak`
-        indent (joinWithMap break (formatLetBinding conf) bindings)
+      `flexSpaceBreak` indent (formatLetGroups conf (NonEmptyArray.toArray bindings))
   DoDiscard expr ->
     formatExpr conf expr
   DoBind binder tok expr ->
@@ -1146,3 +1146,122 @@ commentedFlexGroup tok spc conf doc =
   formatWithComments tok.leadingComments [] $ flexGroup do
     formatToken conf (tok { leadingComments = [] })
       `spc` doc
+
+data DeclGroup
+  = DeclGroupValueSignature Ident
+  | DeclGroupValue Ident
+  | DeclGroupTypeSignature Proper
+  | DeclGroupType Proper
+  | DeclGroupClass Proper
+  | DeclGroupInstance
+  | DeclGroupFixity
+  | DeclGroupForeign
+  | DeclGroupRole
+  | DeclGroupUnknown
+
+data DeclGroupSeparator
+  = DeclGroupSame
+  | DeclGroupHard
+  | DeclGroupSoft
+
+formatTopLevelGroups :: forall e a. Format (Array (Declaration e)) e a
+formatTopLevelGroups = formatDeclGroups topDeclGroupSeparator topDeclGroup formatDecl
+  where
+  topDeclGroupSeparator = case _, _ of
+    DeclGroupValue a, DeclGroupValue b ->
+      if a == b then DeclGroupSame
+      else DeclGroupSoft
+    DeclGroupValueSignature a, DeclGroupValue b ->
+      if a == b then DeclGroupSame
+      else DeclGroupHard
+    _, DeclGroupValueSignature _ -> DeclGroupHard
+    DeclGroupType _, DeclGroupType _ -> DeclGroupSoft
+    DeclGroupTypeSignature a, DeclGroupType b ->
+      if a == b then DeclGroupSame
+      else DeclGroupHard
+    DeclGroupTypeSignature a, DeclGroupClass b ->
+      if a == b then DeclGroupSame
+      else DeclGroupHard
+    _, DeclGroupTypeSignature _ -> DeclGroupHard
+    DeclGroupClass _, DeclGroupClass _ -> DeclGroupSoft
+    _, DeclGroupClass _ -> DeclGroupHard
+    DeclGroupInstance, DeclGroupInstance -> DeclGroupSoft
+    _, DeclGroupInstance -> DeclGroupHard
+    DeclGroupFixity, DeclGroupFixity -> DeclGroupSoft
+    _, DeclGroupFixity -> DeclGroupHard
+    DeclGroupForeign, DeclGroupForeign -> DeclGroupSoft
+    _, DeclGroupForeign -> DeclGroupHard
+    DeclGroupRole, DeclGroupRole -> DeclGroupSoft
+    _, DeclGroupRole -> DeclGroupHard
+    _, _ -> DeclGroupSoft
+
+  topDeclGroup = case _ of
+    DeclData { name: Name { name } } _ -> DeclGroupType name
+    DeclType { name: Name { name } } _ _ -> DeclGroupType name
+    DeclNewtype { name: Name { name } } _ _ _ -> DeclGroupType name
+    DeclClass { name: Name { name } } _ -> DeclGroupClass name
+    DeclKindSignature _ (Labeled { label: Name { name } }) -> DeclGroupTypeSignature name
+    DeclSignature (Labeled { label: Name { name } }) -> DeclGroupValueSignature name
+    DeclValue { name: Name { name } } -> DeclGroupValue name
+    DeclInstanceChain _ -> DeclGroupInstance
+    DeclDerive _ _ _ -> DeclGroupInstance
+    DeclFixity _ -> DeclGroupFixity
+    DeclForeign _ _ _ -> DeclGroupForeign
+    DeclRole _ _ _ _ -> DeclGroupRole
+    DeclError _ -> DeclGroupUnknown
+
+formatLetGroups :: forall e a. Format (Array (LetBinding e)) e a
+formatLetGroups = formatDeclGroups letDeclGroupSeparator letGroup formatLetBinding
+  where
+  letDeclGroupSeparator = case _, _ of
+    _, DeclGroupValueSignature _ -> DeclGroupHard
+    _, _ -> DeclGroupSame
+
+  letGroup = case _ of
+    LetBindingSignature (Labeled { label: Name { name } }) -> DeclGroupValueSignature name
+    LetBindingName { name: Name { name } } -> DeclGroupValue name
+    LetBindingPattern _ _ _ -> DeclGroupUnknown
+    LetBindingError _ -> DeclGroupUnknown
+
+formatDeclGroups
+  :: forall e a b
+   . (DeclGroup -> DeclGroup -> DeclGroupSeparator)
+  -> (b -> DeclGroup)
+  -> Format b e a
+  -> Format (Array b) e a
+formatDeclGroups declSeparator k format conf =
+  maybe mempty joinDecls <<< foldr go Nothing
+  where
+  go decl = Just <<< case _ of
+    Nothing ->
+      { doc: mempty
+      , sep: DeclGroupSame
+      , group: k decl
+      , decls: NonEmptyList.singleton decl
+      }
+    Just acc -> do
+      let group = k decl
+      case declSeparator group acc.group of
+        DeclGroupSame ->
+          { doc: acc.doc
+          , sep: acc.sep
+          , group
+          , decls: NonEmptyList.cons decl acc.decls
+          }
+        sep ->
+          { doc: joinDecls acc
+          , sep
+          , group
+          , decls: NonEmptyList.singleton decl
+          }
+
+  joinDecls acc = case acc.sep of
+    DeclGroupSame ->
+      newDoc `break` acc.doc
+    DeclGroupSoft ->
+      newDoc `flexDoubleBreak` acc.doc
+    DeclGroupHard ->
+      newDoc `break` forceMinSourceBreaks 2 acc.doc
+    where
+    newDoc =
+      joinWithMap break (format conf) acc.decls
