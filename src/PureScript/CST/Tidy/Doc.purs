@@ -82,10 +82,10 @@ blockComment = splitLines >>> Array.uncons >>> foldMap \{ head, tail } -> do
     prefixSpaces =
       tail
         # Array.mapMaybe
-          ( \str -> do
-              let spaces = SCU.length $ String.takeWhile (eq (String.codePointFromChar ' ')) str
-              guard (spaces < SCU.length str) $> spaces
-          )
+            ( \str -> do
+                let spaces = SCU.length $ String.takeWhile (eq (String.codePointFromChar ' ')) str
+                guard (spaces < SCU.length str) $> spaces
+            )
         # Array.sort
         # Array.head
   case prefixSpaces of
