@@ -109,7 +109,7 @@ toFormatDoc = fst <<< goInit
         next = Array.foldr goInitApp (goLastApp last) init
         this = fst (goInit head)
         docGroup = flexSelectJoin this (fst next) (indMulti head ind (fst next))
-        docBreak = docJoin this `break` ind (snd next)
+        docBreak = docJoin this <> indMulti head ind (fst next)
       Tuple docGroup docBreak
     HangOps ind head tail -> do
       let

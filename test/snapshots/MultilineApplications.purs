@@ -91,3 +91,20 @@ test =
           bar do
             baz
 
+test = foo bar \_ -> baz case _ of
+    Foo -> 42
+
+test = foo bar
+  \_ -> baz case _ of
+    Foo -> 42
+
+test = foo
+ bar
+ \_ -> baz case _ of
+    Foo -> 42
+
+test =
+ foo
+ bar
+ \_ -> baz case _ of
+    Foo -> 42
