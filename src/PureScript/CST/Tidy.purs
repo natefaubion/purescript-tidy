@@ -750,9 +750,9 @@ formatHangingExpr conf = case _ of
       , value: ty
       }
   ExprInfix expr exprs ->
-    hangConcatApp
+    hangOps
       (formatHangingExpr conf expr)
-      (map (\(Tuple op b) -> hang (formatParens formatExpr conf op) (formatHangingExpr conf b)) exprs)
+      (map (\(Tuple op b) -> HangingOp 3 (formatParens formatExpr conf op) (formatHangingExpr conf b)) exprs)
   ExprOp expr exprs ->
     formatHangingOperatorTree formatQualifiedName formatHangingExpr conf
       $ toQualifiedOperatorTree conf.operators OperatorValue expr exprs

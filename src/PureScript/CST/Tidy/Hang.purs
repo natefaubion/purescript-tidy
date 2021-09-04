@@ -129,9 +129,9 @@ toFormatDoc = fst <<< goInit
 
   goLastApp doc = do
     let
-      this = fst (goLast doc)
-      docGroup = flexGroup this
-      docBreak = this
+      this = goLast doc
+      docGroup = flexGroup (fst this)
+      docBreak = snd this
     Tuple docGroup docBreak
 
   goInitOp ind (HangingOp width op doc) next = do
