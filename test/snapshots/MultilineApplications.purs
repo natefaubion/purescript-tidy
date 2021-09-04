@@ -68,3 +68,26 @@ test = case foo of
 test =
   foo bar
     # foo
+
+test =
+  foo
+    bar do
+      baz do
+        42
+
+test =
+  foo
+    bar do
+      baz do
+        42
+    qux
+
+test =
+  foo
+              bar do
+                baz
+            bar do
+              baz
+          bar do
+            baz
+
