@@ -85,18 +85,18 @@ instance formatErrorRecoveredError :: FormatError RecoveredError where
             formatWithComments head.leadingComments last.trailingComments
               $ fromDoc
               $ Dodo.withPosition \{ nextIndent } -> do
-                let
-                  head' =
-                    Dodo.text (printToken UnicodeSource head.value)
-                      <> formatRecoveredComments nextIndent head.trailingComments
-                  init' = init # foldMap \tok ->
-                    formatRecoveredComments nextIndent tok.leadingComments
-                      <> Dodo.text (printToken UnicodeSource tok.value)
-                      <> formatRecoveredComments nextIndent tok.trailingComments
-                  last' =
-                    formatRecoveredComments nextIndent last.leadingComments
-                      <> Dodo.text (printToken UnicodeSource last.value)
-                head' <> init' <> last'
+                  let
+                    head' =
+                      Dodo.text (printToken UnicodeSource head.value)
+                        <> formatRecoveredComments nextIndent head.trailingComments
+                    init' = init # foldMap \tok ->
+                      formatRecoveredComments nextIndent tok.leadingComments
+                        <> Dodo.text (printToken UnicodeSource tok.value)
+                        <> formatRecoveredComments nextIndent tok.trailingComments
+                    last' =
+                      formatRecoveredComments nextIndent last.leadingComments
+                        <> Dodo.text (printToken UnicodeSource last.value)
+                  head' <> init' <> last'
 
           Nothing ->
             formatToken { unicode: UnicodeSource } head
