@@ -7,6 +7,7 @@ module PureScript.CST.Tidy.Doc
   , blockComment
   , anchor
   , flatten
+  , flattenMax
   , forceBreak
   , indent
   , align
@@ -120,11 +121,14 @@ anchor = case _ of
     FormatDoc fl 0 (if n > 0 then true else m) doc fr
 
 flatten :: forall a. FormatDoc a -> FormatDoc a
-flatten = case _ of
+flatten = flattenMax 0
+
+flattenMax :: forall a. Int -> FormatDoc a -> FormatDoc a
+flattenMax n' = case _ of
   FormatEmpty ->
     FormatEmpty
-  FormatDoc fl _ m doc fr ->
-    FormatDoc fl 0 m doc fr
+  FormatDoc fl n m doc fr ->
+    FormatDoc fl (min n' n) m doc fr
 
 forceBreak :: forall a. FormatDoc a -> FormatDoc a
 forceBreak = case _ of

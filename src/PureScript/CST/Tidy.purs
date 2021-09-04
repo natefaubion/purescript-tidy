@@ -31,7 +31,7 @@ import Data.Tuple (Tuple(..), fst)
 import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
+import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flattenMax, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
 import PureScript.CST.Tidy.Doc (FormatDoc, toDoc) as Exports
 import PureScript.CST.Tidy.Hang (HangingDoc, HangingOp(..), hang, hangApp, hangBreak, hangConcatApp, hangOps, hangWithIndent)
 import PureScript.CST.Tidy.Hang as Hang
@@ -522,13 +522,25 @@ formatSignature :: forall e a. Format (Labeled (FormatDoc a) (Type e)) e a
 formatSignature conf (Labeled { label, separator, value }) =
   case conf.typeArrowPlacement of
     TypeArrowFirst ->
-      label `flexSpaceBreak` indent do
-        anchor (formatToken conf separator)
-          `space` anchor (Hang.toFormatDoc (formatHangingPolytype typeAlign conf (toPolytype value)))
+      if Array.null polytype.init then
+        Hang.toFormatDoc $ Hang.hangWithIndent indent (Hang.hangBreak label)
+          [ Hang.hangWithIndent (align width <<< indent) (Hang.hangBreak (flattenMax 1 (formatToken conf separator)))
+              [ formattedPolytype ]
+          ]
+      else
+        label `flexSpaceBreak` indent do
+          anchor (formatToken conf separator)
+            `space` anchor (Hang.toFormatDoc formattedPolytype)
       where
-      typeAlign
-        | isUnicode = align 2
-        | otherwise = align 3
+      formattedPolytype =
+        formatHangingPolytype (align width) conf polytype
+
+      polytype =
+        toPolytype value
+
+      width
+        | isUnicode = 2
+        | otherwise = 3
 
       isUnicode = case conf.unicode of
         UnicodeAlways -> true

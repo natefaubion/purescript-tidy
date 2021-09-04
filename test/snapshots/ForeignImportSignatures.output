@@ -8,8 +8,25 @@ foreign import test
 
 foreign import test
   :: Foo
+       { bar :: Int
+       }
+
+foreign import test :: Foo
+  { bar :: Int
+  }
+
+foreign import test ::
+  Foo
     { bar :: Int
     }
+
+foreign import test
+  :: Foo
+       { bar :: Int
+       }
+  -> Foo
+       { bar :: Int
+       }
 
 foreign import test
   :: Foo
@@ -29,6 +46,24 @@ foreign import test ::
   Bar
 
 foreign import test ::
+  Foo
+    { bar :: Int
+    }
+
+foreign import test ::
+  Foo
+    { bar :: Int
+    }
+
+foreign import test ::
+  Foo
+    { bar :: Int
+    }
+
+foreign import test ::
+  Foo
+    { bar :: Int
+    } ->
   Foo
     { bar :: Int
     }
