@@ -33,7 +33,7 @@ import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
 import PureScript.CST.Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
 import PureScript.CST.Tidy.Doc (FormatDoc, toDoc) as Exports
-import PureScript.CST.Tidy.Hang (HangingDoc, hang, hangApp, hangBreak, hangConcatApp, hangOps, hangWithIndent)
+import PureScript.CST.Tidy.Hang (HangingDoc, HangingOp(..), hang, hangApp, hangBreak, hangConcatApp, hangOps, hangWithIndent)
 import PureScript.CST.Tidy.Hang as Hang
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), PrecedenceMap, QualifiedOperator(..), toOperatorTree)
 import PureScript.CST.Tidy.Token (UnicodeOption(..)) as Exports
@@ -85,18 +85,18 @@ instance formatErrorRecoveredError :: FormatError RecoveredError where
             formatWithComments head.leadingComments last.trailingComments
               $ fromDoc
               $ Dodo.withPosition \{ nextIndent } -> do
-                let
-                  head' =
-                    Dodo.text (printToken UnicodeSource head.value)
-                      <> formatRecoveredComments nextIndent head.trailingComments
-                  init' = init # foldMap \tok ->
-                    formatRecoveredComments nextIndent tok.leadingComments
-                      <> Dodo.text (printToken UnicodeSource tok.value)
-                      <> formatRecoveredComments nextIndent tok.trailingComments
-                  last' =
-                    formatRecoveredComments nextIndent last.leadingComments
-                      <> Dodo.text (printToken UnicodeSource last.value)
-                head' <> init' <> last'
+                  let
+                    head' =
+                      Dodo.text (printToken UnicodeSource head.value)
+                        <> formatRecoveredComments nextIndent head.trailingComments
+                    init' = init # foldMap \tok ->
+                      formatRecoveredComments nextIndent tok.leadingComments
+                        <> Dodo.text (printToken UnicodeSource tok.value)
+                        <> formatRecoveredComments nextIndent tok.trailingComments
+                    last' =
+                      formatRecoveredComments nextIndent last.leadingComments
+                        <> Dodo.text (printToken UnicodeSource last.value)
+                  head' <> init' <> last'
 
           Nothing ->
             formatToken { unicode: UnicodeSource } head
@@ -893,7 +893,7 @@ formatCaseBranch conf (Tuple (Separated { head, tail }) guarded) =
 
 formatGuardedExpr :: forall e a. FormatHanging (GuardedExpr e) e a
 formatGuardedExpr conf (GuardedExpr ge@{ patterns: Separated { head, tail }, where: Where { expr, bindings } }) =
-  hangWithIndent (Dodo.align 2 <<< Dodo.indent)
+  hangWithIndent (align 2 <<< indent)
     ( hangBreak
         ( formatToken conf ge.bar
             `space` flexGroup patternGuards
@@ -1033,7 +1033,7 @@ formatRecordLabeled format conf = case _ of
   RecordField label separator value ->
     declareHanging (formatName conf label) (<>) (anchor (formatToken conf separator)) (format conf value)
 
-formatHangingOperatorTree :: forall e a b c. Format b e a -> FormatHanging c e a -> FormatHanging (OperatorTree b c) e a
+formatHangingOperatorTree :: forall e a b c. Format (QualifiedName b) e a -> FormatHanging c e a -> FormatHanging (OperatorTree (QualifiedName b) c) e a
 formatHangingOperatorTree formatOperator format conf = go
   where
   go = case _ of
@@ -1041,7 +1041,10 @@ formatHangingOperatorTree formatOperator format conf = go
     OpList head _ tail ->
       hangOps
         (go head)
-        (map (\(Tuple op b) -> Tuple (formatOperator conf op) (go b)) tail)
+        (map (\(Tuple op b) -> HangingOp (opWidth op) (formatOperator conf op) (go b)) tail)
+
+  opWidth (QualifiedName { token }) =
+    token.range.end.column - token.range.start.column
 
 formatParens :: forall e a b. Format b e a -> Format (Wrapped b) e a
 formatParens format conf (Wrapped { open, value, close }) =

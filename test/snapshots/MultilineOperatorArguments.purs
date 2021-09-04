@@ -1,0 +1,46 @@
+module MultilineOperatorArguments where
+
+test = foo #
+  case _ of
+            Foo -> 42
+      # map (\a ->
+            a)
+      # map (\a ->
+            a)
+
+test = foo #
+  case _ of
+            Foo -> 42
+      # map (\a ->
+            a)
+      #
+      map (\a ->
+            a)
+
+test = foo #
+  case _ of
+            Foo -> 42
+      # map (\a ->
+            a)
+      >>> map (\a ->
+            a)
+
+test = foo #
+  case _ of
+            Foo -> 42
+      # map (\a ->
+            a)
+      >>>
+      map (\a ->
+            a)
+
+test =
+  foo >>> case _ of
+            Foo -> 42
+      >>> case _ of
+            Foo -> 42
+      # case _ of
+            Foo -> 42
+
+test = foo # map (\a -> a) # case _ of
+                                   Foo -> 42
