@@ -49,7 +49,6 @@ import Node.FS.Stats as Stats
 import Node.Glob.Basic (expandGlobsCwd, expandGlobsWithStatsCwd)
 import Node.Path (FilePath)
 import Node.Path as Path
-import Node.Process (cwd)
 import Node.Process as Process
 import Node.Stream as Stream
 import Node.WorkerBees as Worker
@@ -184,12 +183,13 @@ main = launchAff_ do
 
         FormatInPlace mode cliOptions configOption numThreads printTiming globs -> do
           currentDir <- liftEffect Process.cwd
+          let root = (Path.parse currentDir).root
           srcLocation <- fold <$> liftEffect (Process.lookupEnv "TIDY_INSTALL_LOC")
           files <- expandGlobs globs
           filesWithOptions <- flip evalStateT Map.empty do
             for files \filePath -> do
               rcMap <- State.get
-              rcOptions <- State.state <<< const =<< lift (resolveRcForDir rcMap (Path.dirname filePath))
+              rcOptions <- State.state <<< const =<< lift (resolveRcForDir root rcMap (Path.dirname filePath))
               options <- lift $ getOptions cliOptions rcOptions filePath configOption
               pure
                 { filePath
@@ -265,7 +265,9 @@ main = launchAff_ do
                 Process.exit 1
 
         Format cliOptions configOption -> do
-          Tuple rcOptions _ <- resolveRcForDir Map.empty =<< liftEffect cwd
+          currentDir <- liftEffect Process.cwd
+          let root = (Path.parse currentDir).root
+          Tuple rcOptions _ <- resolveRcForDir root Map.empty currentDir
           options <- getOptions cliOptions rcOptions "the current directory." configOption
           operators <- parseOperatorTable <<< fromMaybe defaultOperators <$> traverse readOperatorTable options.operatorsFile
           contents <- readStdin
@@ -328,8 +330,8 @@ formatInPlaceOne { shouldCheck, operatorsByPath } input@{ config } = do
 
 type RcMap = Map FilePath (Maybe FormatOptions)
 
-resolveRcForDir :: RcMap -> FilePath -> Aff (Tuple (Maybe FormatOptions) RcMap)
-resolveRcForDir = go List.Nil
+resolveRcForDir :: FilePath -> RcMap -> FilePath -> Aff (Tuple (Maybe FormatOptions) RcMap)
+resolveRcForDir root = go List.Nil
   where
   go :: List FilePath -> RcMap -> FilePath -> Aff (Tuple (Maybe FormatOptions) RcMap)
   go paths cache dir = case Map.lookup dir cache of
@@ -340,7 +342,7 @@ resolveRcForDir = go List.Nil
       contents <- try $ FS.readTextFile UTF8 filePath
       case contents of
         Left _
-          | dir == Path.sep ->
+          | dir == root ->
               pure $ unwind cache Nothing (List.Cons dir paths)
           | otherwise ->
               go (List.Cons dir paths) cache (Path.dirname dir)
