@@ -1,5 +1,6 @@
 module PureScript.CST.Tidy.Hang
   ( HangingDoc
+  , HangingOp(..)
   , hang
   , hangWithIndent
   , hangBreak
@@ -13,39 +14,42 @@ module PureScript.CST.Tidy.Hang
 
 import Prelude
 
-import Data.Array (foldr)
+import Data.Array as Array
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Maybe (maybe)
-import Data.Tuple (Tuple(..), uncurry)
+import Data.Tuple (Tuple(..), fst, snd)
 import Dodo (Doc)
 import Dodo as Dodo
-import PureScript.CST.Tidy.Doc (ForceBreak(..), FormatDoc(..), flatten, flexGroup, forceBreak)
+import Partial.Unsafe (unsafeCrashWith)
+import PureScript.CST.Tidy.Doc (ForceBreak(..), FormatDoc(..), align, break, flatten, flexGroup, forceBreak, indent)
 
 data HangingDoc a
   = HangBreak (FormatDoc a)
-  | HangOps (Doc a -> Doc a) (HangingDoc a) (NonEmptyArray (Tuple (FormatDoc a) (HangingDoc a)))
-  | HangApp (Doc a -> Doc a) (HangingDoc a) (NonEmptyArray (HangingDoc a))
+  | HangOps (FormatDoc a -> FormatDoc a) (HangingDoc a) (NonEmptyArray (HangingOp a))
+  | HangApp (FormatDoc a -> FormatDoc a) (HangingDoc a) (NonEmptyArray (HangingDoc a))
+
+data HangingOp a = HangingOp Int (FormatDoc a) (HangingDoc a)
 
 hang :: forall a. FormatDoc a -> HangingDoc a -> HangingDoc a
-hang a = HangApp Dodo.indent (hangBreak a) <<< pure
+hang a = HangApp indent (hangBreak a) <<< pure
 
-hangWithIndent :: forall a. (Doc a -> Doc a) -> HangingDoc a -> Array (HangingDoc a) -> HangingDoc a
+hangWithIndent :: forall a. (FormatDoc a -> FormatDoc a) -> HangingDoc a -> Array (HangingDoc a) -> HangingDoc a
 hangWithIndent ind a = maybe a (HangApp ind a) <<< NonEmptyArray.fromArray
 
 hangBreak :: forall a. FormatDoc a -> HangingDoc a
 hangBreak = HangBreak <<< flexGroup
 
 hangApp :: forall a. HangingDoc a -> NonEmptyArray (HangingDoc a) -> HangingDoc a
-hangApp = HangApp Dodo.indent
+hangApp = HangApp indent
 
-hangOps :: forall a. HangingDoc a -> NonEmptyArray (Tuple (FormatDoc a) (HangingDoc a)) -> HangingDoc a
-hangOps = HangOps Dodo.indent
+hangOps :: forall a. HangingDoc a -> NonEmptyArray (HangingOp a) -> HangingDoc a
+hangOps = HangOps indent
 
 hangConcatApp :: forall a. HangingDoc a -> NonEmptyArray (HangingDoc a) -> HangingDoc a
 hangConcatApp a b = case a of
   HangApp ind head tail -> HangApp ind head (tail <> b)
-  _ -> HangApp Dodo.indent a b
+  _ -> HangApp indent a b
 
 hangHead :: forall a. HangingDoc a -> FormatDoc a
 hangHead = case _ of
@@ -61,193 +65,185 @@ overHangHead f = go
     HangOps ind doc docs -> HangOps ind (go doc) docs
     HangApp ind doc docs -> HangApp ind (go doc) docs
 
-data HangStk a
-  = HangStkRoot
-  | HangStkApp (HangStk a) (Doc a -> Doc a) (HangingDoc a) (Array (HangingDoc a))
-  | HangStkOps (HangStk a) (Doc a -> Doc a) (HangingDoc a) (Array (Tuple (FormatDoc a) (HangingDoc a)))
-  | HangStkOp (HangStk a) (FormatDoc a)
-
-data FormatDoc' a = FormatDoc' ForceBreak Int Boolean (Doc a) ForceBreak
-
-data HangDoc a
-  = HangGroup (Doc a) (Doc a) (FormatDoc' a)
-  | HangEmpty
-
-toFormatDoc :: forall a. HangingDoc a -> FormatDoc a
-toFormatDoc = unHangDoc <<< followLast HangStkRoot
-  where
-  unHangDoc :: HangDoc a -> FormatDoc a
-  unHangDoc = case _ of
-    HangEmpty ->
-      FormatEmpty
-    HangGroup _ _ (FormatDoc' a b c d e) ->
-      FormatDoc a b c d e
-
-  followLast :: HangStk a -> HangingDoc a -> HangDoc a
-  followLast stk = case _ of
-    HangBreak doc ->
-      unwindStack (formatBreak doc) stk
-    HangOps ind doc docs ->
-      followLast (HangStkOp (HangStkOps stk ind doc init) op) last
-      where
-      { init, last: Tuple op last } =
-        NonEmptyArray.unsnoc docs
-    HangApp ind doc docs ->
-      followLast (HangStkApp stk ind doc init) last
-      where
-      { init, last } =
-        NonEmptyArray.unsnoc docs
-
-  unwindStack :: HangDoc a -> HangStk a -> HangDoc a
-  unwindStack accum = case _ of
-    HangStkApp stk ind head tail -> do
-      let
-        args = foldr (formatArg <<< toFormatDoc) accum tail
-        next = case head of
-          HangBreak _ ->
-            formatApp ind (toFormatDoc head) args
-          _ ->
-            formatMultilineApp (toFormatDoc head) args
-      unwindStack next stk
-    HangStkOps stk ind head tail -> do
-      let
-        args = foldr (formatArg <<< unHangDoc <<< uncurry formatInitOp) accum tail
-        next = formatApp ind (toFormatDoc head) args
-      unwindStack next stk
-    HangStkOp stk op ->
-      unwindStack (formatOp op accum) stk
-    HangStkRoot ->
-      accum
-
-  formatMultilineApp :: FormatDoc a -> HangDoc a -> HangDoc a
-  formatMultilineApp = case _, _ of
-    FormatEmpty, b ->
-      b
-    a, HangEmpty ->
-      formatBreak a
-    a@(FormatDoc fl1 n1 _ doc1 _), HangGroup _ docBreak b@(FormatDoc' _ _ _ _ fr2) ->
-      HangGroup
-        (forceBreaks n1 <> doc1 <> docBreak)
-        (forceBreaks n1 <> doc1 <> docBreak)
-        ( FormatDoc' fl1 n1
-            (isMultilineJoin a b)
-            (Dodo.flexGroup doc1 <> docBreak)
-            fr2
-        )
-
-  formatApp :: (Doc a -> Doc a) -> FormatDoc a -> HangDoc a -> HangDoc a
-  formatApp ind = case _, _ of
-    FormatEmpty, b ->
-      b
-    a, HangEmpty ->
-      formatBreak a
-    a@(FormatDoc fl1 n1 _ doc1 _), HangGroup docGroup _ b@(FormatDoc' _ _ _ _ fr2) -> do
-      let docIndent = ind docGroup
-      HangGroup
-        ( Dodo.flexSelect
-            (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))
-            docGroup
-            docIndent
-        )
-        (forceBreaks n1 <> doc1 <> docIndent)
-        ( FormatDoc' fl1 n1
-            (isMultilineJoin a b)
-            (Dodo.flexGroup doc1 <> docIndent)
-            fr2
-        )
-
-  formatArg :: FormatDoc a -> HangDoc a -> HangDoc a
-  formatArg = case _, _ of
-    FormatEmpty, b ->
-      b
-    a, HangEmpty ->
-      formatBreak a
-    a@(FormatDoc fl1 n1 _ doc1 _), HangGroup docGroup docBreak b@(FormatDoc' _ _ _ _ fr2) ->
-      HangGroup
-        ( Dodo.flexSelect
-            (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))
-            docGroup
-            docBreak
-        )
-        (forceBreaks n1 <> doc1 <> docBreak)
-        ( FormatDoc' fl1 n1
-            (isMultilineJoin a b)
-            ( Dodo.flexSelect
-                (withBreaks fl1 n1 doc1 doc1)
-                docGroup
-                docBreak
-            )
-            fr2
-        )
-
-  formatOp :: FormatDoc a -> HangDoc a -> HangDoc a
-  formatOp = case _, _ of
-    FormatEmpty, b ->
-      b
-    a, HangEmpty ->
-      formatBreak a
-    a@(FormatDoc fl1 n1 _ doc1 fr1), HangGroup docGroup docBreak b@(FormatDoc' fl2 n2 _ doc2 fr2) -> do
-      let docIndent = Dodo.indent docGroup
-      HangGroup
-        ( Dodo.flexSelect
-            (withBreaks fl1 n1 doc1 (Dodo.spaceBreak <> doc1))
-            docGroup
-            docIndent
-        )
-        (forceBreaks n1 <> doc1 <> docIndent)
-        ( FormatDoc' fl1 n1
-            (isMultilineJoin a b)
-            ( Dodo.flexGroup doc1 <>
-                if fr1 == ForceBreak || fl2 == ForceBreak || n2 > 0 then
-                  Dodo.indent docBreak
-                else
-                  Dodo.space <> doc2
-            )
-            fr2
-        )
-
-  formatInitOp :: FormatDoc a -> HangingDoc a -> HangDoc a
-  formatInitOp op doc = case op, hangHead doc of
-    FormatDoc fl1 n1 _ _ fr1, FormatDoc fl2 n2 m2 _ _
-      | fl1 /= ForceBreak && n1 == 0 && fr1 /= ForceBreak && fl2 /= ForceBreak && n2 > 0 ->
-          formatInitOp (forceBreak op) (overHangHead flatten doc)
-      | HangBreak _ <- doc
-      , fr1 /= ForceBreak && fl2 /= ForceBreak && n2 == 0 && m2 ->
-          formatOp op (followLast HangStkRoot (overHangHead forceBreak doc))
-    _, _ ->
-      formatOp op (followLast HangStkRoot doc)
-
-  formatBreak :: FormatDoc a -> HangDoc a
-  formatBreak = case _ of
-    FormatEmpty ->
-      HangEmpty
-    FormatDoc fl n m doc fr -> do
-      let group = if m then identity else Dodo.flexGroup
-      HangGroup
-        (withBreaks fl n doc (group (Dodo.spaceBreak <> doc)))
-        (forceBreaks n <> doc)
-        (FormatDoc' fl n m doc fr)
-
 forceBreaks :: forall a. Int -> Doc a
 forceBreaks n
   | n >= 2 = Dodo.break <> Dodo.break
   | otherwise = Dodo.break
 
-withBreaks :: forall a. ForceBreak -> Int -> Doc a -> Doc a -> Doc a
-withBreaks fl n doc1 doc2
-  | n > 0 || fl == ForceBreak = forceBreaks n <> doc1
-  | otherwise = doc2
+breaks :: forall a. ForceBreak -> Int -> Doc a
+breaks fl n
+  | fl == ForceBreak || n > 0 = forceBreaks n
+  | fl == ForceSpace = Dodo.space
+  | otherwise = mempty
 
-isMultilineJoin :: forall a. FormatDoc a -> FormatDoc' a -> Boolean
-isMultilineJoin = case _, _ of
-  FormatEmpty, FormatDoc' fl n m _ fr ->
-    m
-      || fl == ForceBreak
-      || fr == ForceBreak
-      || n > 0
-  FormatDoc _ _ m1 _ fr1, FormatDoc' fl2 n2 m2 _ _ ->
-    m1
-      || m2
-      || fr1 == ForceBreak
-      || fl2 == ForceBreak
-      || n2 > 0
+toFormatDoc :: forall a. HangingDoc a -> FormatDoc a
+toFormatDoc = fst <<< goInit
+  where
+  goInit = case _ of
+    HangBreak doc ->
+      Tuple doc doc
+    HangApp ind head tail -> do
+      let
+        { init, last } = NonEmptyArray.unsnoc tail
+        next = Array.foldr goInitApp (goLastApp last) init
+        this = fst (goInit head)
+        docGroup = flexSelect this (ind (fst next)) (indMulti head ind (fst next))
+        docBreak = this `break` ind (snd next)
+      Tuple docGroup docBreak
+    HangOps ind head tail -> do
+      let
+        { init, last } = NonEmptyArray.unsnoc tail
+        next = Array.foldr (goInitOp ind) (goLastOp ind last) init
+        this = fst (goInit head)
+        docGroup = flexGroup this <> ind (fst next)
+        docBreak = this `break` ind (snd next)
+      Tuple docGroup docBreak
+
+  goLast = case _ of
+    HangBreak doc -> do
+      let doc' = docJoin doc
+      Tuple doc' doc'
+    HangApp ind head tail -> do
+      let
+        { init, last } = NonEmptyArray.unsnoc tail
+        next = Array.foldr goInitApp (goLastApp last) init
+        this = fst (goInit head)
+        docGroup = flexSelectJoin this (fst next) (indMulti head ind (fst next))
+        docBreak = docJoin this `break` ind (snd next)
+      Tuple docGroup docBreak
+    HangOps ind head tail -> do
+      let
+        { init, last } = NonEmptyArray.unsnoc tail
+        next = Array.foldr (goInitOp ind) (goLastOp ind last) init
+        this = fst (goInit head)
+        docGroup = flexSelectJoin this (fst next) (ind (fst next))
+        docBreak = docJoin this `break` ind (snd next)
+      Tuple docGroup docBreak
+
+  goInitApp doc next = do
+    let
+      this = fst (goInit doc)
+      docGroup = flexSelectJoin this (fst next) (snd next)
+      docBreak = docJoin this <> snd next
+    Tuple docGroup docBreak
+
+  goLastApp doc = do
+    let
+      this = fst (goLast doc)
+      docGroup = flexGroup this
+      docBreak = this
+    Tuple docGroup docBreak
+
+  goInitOp ind (HangingOp width op doc) next = do
+    let
+      Tuple op' doc' = realignOp op doc
+      algn = if width <= 1 then align 2 else identity
+      docOprd = fst (goInitOperand algn ind doc')
+      docGroup = flexSelectJoin (op' <> docOprd) (fst next) (snd next)
+      docBreak = docJoin op' <> docOprd <> snd next
+    Tuple docGroup docBreak
+
+  goLastOp ind (HangingOp width op doc) = do
+    let
+      algn = if width <= 1 then align 2 else identity
+      next = goLastOperand algn ind doc
+      docIndent = snd next
+      docGroup = flexSelectJoin op (fst next) docIndent
+      docBreak = docJoin op <> docIndent
+    Tuple docGroup docBreak
+
+  goInitOperand prevAlgn prevInd = case _ of
+    HangBreak doc -> do
+      let doc' = prevInd (flexGroup (docJoin doc))
+      Tuple doc' doc'
+    HangApp ind head tail -> do
+      let
+        { init, last } = NonEmptyArray.unsnoc tail
+        next = Array.foldr goInitApp (goLastApp last) init
+        this = fst (goInit head)
+        docGroup =
+          flexSelectJoin (prevInd this)
+            (indMulti head (prevAlgn <<< ind) (fst next))
+            (prevInd (indMulti head ind (fst next)))
+        docBreak = prevInd (docJoin this <> ind (snd next))
+      Tuple docGroup docBreak
+    HangOps ind head tail -> do
+      let
+        { init, last } = NonEmptyArray.unsnoc tail
+        next = Array.foldr (goInitOp ind) (goLastOp ind last) init
+        this = fst (goInit head)
+        docGroup =
+          flexSelectJoin (prevInd this)
+            (prevAlgn (ind (fst next)))
+            (prevInd (ind (fst next)))
+        docBreak = prevInd (docJoin this <> ind (snd next))
+      Tuple docGroup docBreak
+
+  goLastOperand prevAlgn prevInd = case _ of
+    HangBreak doc -> do
+      let doc' = flexGroup (docJoin doc)
+      Tuple doc' (prevInd doc')
+    HangApp ind head tail -> do
+      let
+        { init, last } = NonEmptyArray.unsnoc tail
+        next = Array.foldr goInitApp (goLastApp last) init
+        this = fst $ goInit $ case head of
+          HangApp _ _ _ -> overHangHead forceBreak head
+          _ -> head
+        docIndent = indMulti head ind (fst next)
+        docGroup = flexSelectJoin this (fst next) docIndent
+        docBreak = flexSelectJoin (prevInd this) (prevAlgn docIndent) (prevInd docIndent)
+      Tuple docGroup docBreak
+    HangOps ind head tail -> do
+      let
+        { init, last } = NonEmptyArray.unsnoc tail
+        next = Array.foldr (goInitOp ind) (goLastOp ind last) init
+        this = fst (goInit head)
+        docIndent = ind (fst next)
+        docGroup = flexSelectJoin this (fst next) docIndent
+        docBreak = flexSelectJoin (prevInd this) (prevAlgn docIndent) (prevInd docIndent)
+      Tuple docGroup docBreak
+
+  flexSelect = case _, _, _ of
+    FormatDoc fl1 n1 m1 doc1 fr1, FormatDoc fl2 n2 m2 doc2 fr2, FormatDoc fl3 n3 m3 doc3 fr3 -> do
+      let
+        doc2' = breaks (max fr1 fl2) n2 <> doc2
+        doc3' = breaks (max fr1 fl3) n3 <> doc3
+      FormatDoc fl1 n1 (m1 || (m2 && m3))
+        (Dodo.flexSelect doc1 doc2' doc3')
+        (max fr2 fr3)
+    _, _, _ ->
+      unsafeCrashWith "flexSelect/FormatEmpty"
+
+  flexSelectJoin = case _, _, _ of
+    FormatDoc fl1 n1 m1 doc1 fr1, FormatDoc fl2 n2 m2 doc2 fr2, FormatDoc fl3 n3 m3 doc3 fr3 -> do
+      let
+        doc2' = breaks (max fr1 fl2) n2 <> doc2
+        doc3' = breaks (max fr1 fl3) n3 <> doc3
+        br = if fl1 == ForceBreak || n1 > 0 then Dodo.break else Dodo.spaceBreak
+      FormatDoc ForceNone 0 (m1 || (m2 && m3))
+        (Dodo.flexSelect (br <> doc1) doc2' doc3')
+        (max fr2 fr3)
+    _, _, _ ->
+      unsafeCrashWith "flexSelect/FormatEmpty"
+
+  docJoin = case _ of
+    FormatEmpty -> FormatEmpty
+    fdoc@(FormatDoc fl n m doc fr) ->
+      if fl == ForceBreak || n > 0 then fdoc
+      else if m then FormatDoc ForceBreak n m doc fr
+      else FormatDoc ForceNone 0 false (Dodo.spaceBreak <> doc) fr
+
+  realignOp op doc = case op, hangHead doc of
+    FormatDoc fl1 n1 _ _ fr1, FormatDoc fl2 n2 m2 _ _
+      | fl1 /= ForceBreak && n1 == 0 && fr1 /= ForceBreak && fl2 /= ForceBreak && n2 > 0 ->
+          realignOp (forceBreak op) (overHangHead flatten doc)
+      | HangBreak _ <- doc
+      , fr1 /= ForceBreak && fl2 /= ForceBreak && n2 == 0 && m2 ->
+          Tuple op (overHangHead forceBreak doc)
+    _, _ ->
+      Tuple op doc
+
+  indMulti head ind doc = case head of
+    HangApp _ _ _ -> doc
+    _ -> ind doc

@@ -26,6 +26,7 @@ module PureScript.CST.Tidy.Doc
   , flexGroup
   , fromDoc
   , toDoc
+  , mapDoc
   , joinWithMap
   , joinWith
   ) where
