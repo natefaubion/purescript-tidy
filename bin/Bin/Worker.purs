@@ -4,7 +4,6 @@ import Prelude
 
 import Bin.FormatOptions (FormatOptions)
 import Bin.FormatOptions as FormatOptions
-import Bin.Operators (parseOperatorTable)
 import Bin.Timing (hrtime, hrtimeDiff, toMilliseconds)
 import Data.Either (Either(..), either, fromRight')
 import Data.Lazy (Lazy)
@@ -27,6 +26,7 @@ import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (ParseError, printParseError)
 import PureScript.CST.Tidy (defaultFormatOptions, formatModule, toDoc)
+import PureScript.CST.Tidy.Operators (parseOperatorTable)
 import PureScript.CST.Tidy.Precedence (PrecedenceMap, remapOperators)
 
 type WorkerConfig =

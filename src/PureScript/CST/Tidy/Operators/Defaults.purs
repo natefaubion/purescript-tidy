@@ -1,7 +1,7 @@
 --------------------------------------------
 -- This module is generated. DO NOT EDIT! --
 --------------------------------------------
-module DefaultOperators where
+module PureScript.CST.Tidy.Operators.Defaults where
 
 defaultOperators :: Array String
 defaultOperators =

@@ -1,4 +1,4 @@
-module Bin.Operators where
+module PureScript.CST.Tidy.Operators where
 
 import Prelude
 
@@ -13,7 +13,7 @@ import PureScript.CST.Lexer as Lexer
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), Precedence, QualifiedOperator(..), PrecedenceMap, insertOperator, lookupOperator, remapOperators)
 import PureScript.CST.TokenStream (TokenStep(..), TokenStream)
 import PureScript.CST.TokenStream as TokenStream
-import PureScript.CST.Types (Declaration(..), Export(..), FixityOp(..), IntValue(..), Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), Operator(..), Separated(..), Token(..), Wrapped(..))
+import PureScript.CST.Types (Declaration(..), Export(..), FixityOp(..), IntValue(..), Module(..), ModuleBody(..), ModuleHeader(..), Name(..), Operator(..), Separated(..), Token(..), Wrapped(..))
 
 parseOperatorTable :: Array String -> PrecedenceMap
 parseOperatorTable = foldr (uncurry insertOperator) Map.empty <<< Array.mapMaybe parseOperatorPrec
@@ -26,18 +26,34 @@ parseOperatorPrec = Lexer.lex >>> tokenStreamToArray >>> case _ of
     Just $ Tuple (QualifiedOperator modName OperatorType (Operator op)) prec
   _ ->
     Nothing
+  where
+  tokenStreamToArray :: TokenStream -> Either ParseError (Array Token)
+  tokenStreamToArray = go []
+    where
+    go acc = TokenStream.step >>> case _ of
+      TokenEOF _ _ ->
+        Right acc
+      TokenError _ err _ _ ->
+        Left err
+      TokenCons tok _ next _ ->
+        go (Array.snoc acc tok.value) next
 
 resolveOperatorExports :: forall e. PrecedenceMap -> Module e -> PrecedenceMap
-resolveOperatorExports precMap mod@(Module { header: ModuleHeader { exports }, body: ModuleBody { decls } }) =
+resolveOperatorExports
+  precMap
+  mod@
+    ( Module
+        { header: ModuleHeader { exports, name: Name { name: modName } }
+        , body: ModuleBody { decls }
+        }
+    ) =
   case exports of
     Nothing ->
       foldl goDecl precMap decls
     Just (Wrapped { value: Separated { head, tail } }) ->
       foldl goExport precMap $ Array.cons head $ map snd tail
-  where
-  modName =
-    getModuleName mod
 
+  where
   remappedPrecMap =
     remapOperators precMap mod
 
@@ -63,17 +79,3 @@ resolveOperatorExports precMap mod@(Module { header: ModuleHeader { exports }, b
           insertOperator (QualifiedOperator (Just modName) OperatorType op) prec pm
     _ ->
       pm
-
-getModuleName :: forall e. Module e -> ModuleName
-getModuleName (Module { header: ModuleHeader { name: Name { name } } }) = name
-
-tokenStreamToArray :: TokenStream -> Either ParseError (Array Token)
-tokenStreamToArray = go []
-  where
-  go acc = TokenStream.step >>> case _ of
-    TokenEOF _ _ ->
-      Right acc
-    TokenError _ err _ _ ->
-      Left err
-    TokenCons tok _ next _ ->
-      go (Array.snoc acc tok.value) next

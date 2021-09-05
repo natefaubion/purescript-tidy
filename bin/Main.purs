@@ -6,7 +6,6 @@ import ArgParse.Basic (ArgParser)
 import ArgParse.Basic as Arg
 import Bin.FormatOptions (FormatOptions, formatOptions)
 import Bin.FormatOptions as FormatOptions
-import Bin.Operators (getModuleName, parseOperatorTable, resolveOperatorExports)
 import Bin.Version (version)
 import Bin.Worker (WorkerData, WorkerInput, WorkerOutput, formatCommand, formatInPlaceCommand, toWorkerConfig)
 import Control.Monad.State (evalStateT, lift)
@@ -34,7 +33,6 @@ import Data.String as String
 import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested ((/\))
-import DefaultOperators (defaultOperators)
 import Effect (Effect)
 import Effect.Aff (Aff, error, launchAff_, makeAff, throwError, try)
 import Effect.Class (liftEffect)
@@ -56,7 +54,10 @@ import Node.WorkerBees.Aff.Pool (poolTraverse)
 import PureScript.CST (RecoveredParserResult(..), parseModule, toRecovered)
 import PureScript.CST.Errors (printParseError)
 import PureScript.CST.ModuleGraph (ModuleSort(..), sortModules)
+import PureScript.CST.Tidy.Operators (parseOperatorTable, resolveOperatorExports)
+import PureScript.CST.Tidy.Operators.Defaults (defaultOperators)
 import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), PrecedenceMap)
+import PureScript.CST.Types (Module(..), ModuleHeader(..), Name(..))
 
 data FormatMode = Check | Write
 
@@ -389,6 +390,7 @@ generateOperatorsCommand globs = do
 
   case sortModules (_.header <<< unwrap) parsedModules of
     CycleDetected ms -> do
+      let getModuleName (Module { header: ModuleHeader { name: Name { name } } }) = name
       let modNames = map (unwrap <<< getModuleName) ms
       Console.error $ String.joinWith "\n"
         [ "Cycle detected in modules:"
