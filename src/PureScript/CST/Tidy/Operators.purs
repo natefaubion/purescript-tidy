@@ -1,4 +1,4 @@
-module PureScript.CST.Tidy.Operators where
+module Tidy.Operators where
 
 import Prelude
 
@@ -10,10 +10,10 @@ import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Tuple (Tuple(..), snd, uncurry)
 import PureScript.CST.Errors (ParseError)
 import PureScript.CST.Lexer as Lexer
-import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), Precedence, QualifiedOperator(..), PrecedenceMap, insertOperator, lookupOperator, remapOperators)
 import PureScript.CST.TokenStream (TokenStep(..), TokenStream)
 import PureScript.CST.TokenStream as TokenStream
 import PureScript.CST.Types (Declaration(..), Export(..), FixityOp(..), IntValue(..), Module(..), ModuleBody(..), ModuleHeader(..), Name(..), Operator(..), Separated(..), Token(..), Wrapped(..))
+import Tidy.Precedence (OperatorNamespace(..), Precedence, QualifiedOperator(..), PrecedenceMap, insertOperator, lookupOperator, remapOperators)
 
 parseOperatorTable :: Array String -> PrecedenceMap
 parseOperatorTable = foldr (uncurry insertOperator) Map.empty <<< Array.mapMaybe parseOperatorPrec

@@ -3,6 +3,7 @@
   [ "arrays"
   , "control"
   , "dodo-printer"
+  , "either"
   , "foldable-traversable"
   , "lists"
   , "maybe"

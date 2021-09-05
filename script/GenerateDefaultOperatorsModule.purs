@@ -46,7 +46,7 @@ main = do
       [ "--------------------------------------------"
       , "-- This module is generated. DO NOT EDIT! --"
       , "--------------------------------------------"
-      , "module PureScript.CST.Tidy.Operators.Defaults where"
+      , "module Tidy.Operators.Defaults where"
       , ""
       , "defaultOperators :: Array String"
       , "defaultOperators ="

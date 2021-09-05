@@ -1,4 +1,4 @@
-module PureScript.CST.Tidy.Precedence
+module Tidy.Precedence
   ( QualifiedOperator(..)
   , OperatorNamespace(..)
   , OperatorTree(..)

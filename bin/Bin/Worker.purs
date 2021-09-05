@@ -25,9 +25,9 @@ import Node.WorkerBees as Worker
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (ParseError, printParseError)
-import PureScript.CST.Tidy (defaultFormatOptions, formatModule, toDoc)
-import PureScript.CST.Tidy.Operators (parseOperatorTable)
-import PureScript.CST.Tidy.Precedence (PrecedenceMap, remapOperators)
+import Tidy (defaultFormatOptions, formatModule, toDoc)
+import Tidy.Operators (parseOperatorTable)
+import Tidy.Precedence (PrecedenceMap, remapOperators)
 
 type WorkerConfig =
   { importWrap :: String

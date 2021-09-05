@@ -1,4 +1,4 @@
-module PureScript.CST.Tidy.Hang
+module Tidy.Hang
   ( HangingDoc
   , HangingOp(..)
   , hang
@@ -22,7 +22,7 @@ import Data.Tuple (Tuple(..), fst, snd)
 import Dodo (Doc)
 import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
-import PureScript.CST.Tidy.Doc (ForceBreak(..), FormatDoc(..), align, break, flatten, flexGroup, forceBreak, indent)
+import Tidy.Doc (ForceBreak(..), FormatDoc(..), align, break, flatten, flexGroup, forceBreak, indent)
 
 data HangingDoc a
   = HangBreak (FormatDoc a)
