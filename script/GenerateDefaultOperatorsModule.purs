@@ -46,7 +46,7 @@ main = do
       [ "--------------------------------------------"
       , "-- This module is generated. DO NOT EDIT! --"
       , "--------------------------------------------"
-      , "module DefaultOperators where"
+      , "module PureScript.CST.Tidy.Operators.Defaults where"
       , ""
       , "defaultOperators :: Array String"
       , "defaultOperators ="
@@ -66,7 +66,7 @@ main = do
     contents =
       Array.intercalate "\n" (header <> lines <> footer)
 
-  writeTextFile UTF8 (Path.concat [ cwdPath, "bin", "DefaultOperators.purs" ]) contents
+  writeTextFile UTF8 (Path.concat [ cwdPath, "src", "PureScript", "CST", "Tidy", "Operators", "Defaults.purs" ]) contents
 
 defaultSpagoDhall :: String
 defaultSpagoDhall =

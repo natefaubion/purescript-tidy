@@ -2,7 +2,6 @@ module Test.Snapshot where
 
 import Prelude
 
-import Bin.Operators (parseOperatorTable)
 import Control.MonadZero (guard)
 import Data.Array (dropEnd, mapMaybe)
 import Data.Array as Array
@@ -20,7 +19,6 @@ import Data.String as String
 import Data.String.Regex as Regex
 import Data.Traversable (for)
 import Data.Tuple (Tuple(..), fst)
-import DefaultOperators (defaultOperators)
 import Dodo (PrintOptions)
 import Dodo as Dodo
 import Effect (Effect)
@@ -40,6 +38,8 @@ import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (printParseError)
 import PureScript.CST.Tidy (class FormatError, FormatOptions)
 import PureScript.CST.Tidy as Tidy
+import PureScript.CST.Tidy.Operators (parseOperatorTable)
+import PureScript.CST.Tidy.Operators.Defaults (defaultOperators)
 import PureScript.CST.Tidy.Precedence (PrecedenceMap)
 import PureScript.CST.Types (Module)
 import Test.FormatDirective (defaultFormat, directiveRegex, parseDirectivesFromModule)
