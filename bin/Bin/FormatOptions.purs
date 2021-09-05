@@ -13,7 +13,7 @@ import Data.Argonaut.Encode (assoc, encodeJson, extend)
 import Data.Either (Either)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Traversable (traverse)
-import PureScript.CST.Tidy (ImportWrapOption(..), TypeArrowOption(..), UnicodeOption(..))
+import Tidy (ImportWrapOption(..), TypeArrowOption(..), UnicodeOption(..))
 
 type FormatOptions =
   { importWrap :: ImportWrapOption

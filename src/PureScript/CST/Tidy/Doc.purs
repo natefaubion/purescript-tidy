@@ -1,4 +1,4 @@
-module PureScript.CST.Tidy.Doc
+module Tidy.Doc
   ( FormatDoc(..)
   , ForceBreak(..)
   , text
@@ -45,7 +45,7 @@ import Data.Tuple (Tuple(..))
 import Dodo (Doc)
 import Dodo as Dodo
 import Dodo.Internal (LocalOptions)
-import PureScript.CST.Tidy.Util (splitLines)
+import Tidy.Util (splitLines)
 
 data ForceBreak
   = ForceNone

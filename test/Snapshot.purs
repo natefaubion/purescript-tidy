@@ -36,13 +36,13 @@ import Node.Glob.Basic (expandGlobs)
 import Node.Path (FilePath)
 import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (printParseError)
-import PureScript.CST.Tidy (class FormatError, FormatOptions)
-import PureScript.CST.Tidy as Tidy
-import PureScript.CST.Tidy.Operators (parseOperatorTable)
-import PureScript.CST.Tidy.Operators.Defaults (defaultOperators)
-import PureScript.CST.Tidy.Precedence (PrecedenceMap)
 import PureScript.CST.Types (Module)
 import Test.FormatDirective (defaultFormat, directiveRegex, parseDirectivesFromModule)
+import Tidy (class FormatError, FormatOptions)
+import Tidy as Tidy
+import Tidy.Operators (parseOperatorTable)
+import Tidy.Operators.Defaults (defaultOperators)
+import Tidy.Precedence (PrecedenceMap)
 
 data SnapshotResult
   = Passed

@@ -54,10 +54,10 @@ import Node.WorkerBees.Aff.Pool (poolTraverse)
 import PureScript.CST (RecoveredParserResult(..), parseModule, toRecovered)
 import PureScript.CST.Errors (printParseError)
 import PureScript.CST.ModuleGraph (ModuleSort(..), sortModules)
-import PureScript.CST.Tidy.Operators (parseOperatorTable, resolveOperatorExports)
-import PureScript.CST.Tidy.Operators.Defaults (defaultOperators)
-import PureScript.CST.Tidy.Precedence (OperatorNamespace(..), PrecedenceMap)
 import PureScript.CST.Types (Module(..), ModuleHeader(..), Name(..))
+import Tidy.Operators (parseOperatorTable, resolveOperatorExports)
+import Tidy.Operators.Defaults (defaultOperators)
+import Tidy.Precedence (OperatorNamespace(..), PrecedenceMap)
 
 data FormatMode = Check | Write
 

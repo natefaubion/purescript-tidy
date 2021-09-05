@@ -1,4 +1,4 @@
-module PureScript.CST.Tidy.Token
+module Tidy.Token
   ( UnicodeOption(..)
   , printToken
   ) where
