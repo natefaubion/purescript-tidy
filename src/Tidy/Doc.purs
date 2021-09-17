@@ -46,7 +46,6 @@ import Data.Monoid (power)
 import Data.String as String
 import Data.String.CodeUnits as SCU
 import Data.Tuple (Tuple(..))
-import Debug (spy)
 import Dodo (Doc)
 import Dodo as Dodo
 import Dodo.Internal (LocalOptions)
