@@ -1,14 +1,16 @@
 module Tidy.Doc
   ( FormatDoc(..)
+  , LeadingComment(..)
+  , TrailingComment(..)
   , ForceBreak(..)
   , text
   , leadingLineComment
   , trailingLineComment
-  , blockComment
+  , leadingBlockComment
+  , trailingBlockComment
   , anchor
   , flatten
   , flattenMax
-  , forceBreak
   , indent
   , align
   , alignCurrentColumn
@@ -28,6 +30,8 @@ module Tidy.Doc
   , fromDoc
   , toDoc
   , mapDoc
+  , breakDoc
+  , breaks
   , joinWithMap
   , joinWith
   ) where
@@ -36,26 +40,86 @@ import Prelude
 
 import Control.Alternative (guard)
 import Data.Array as Array
-import Data.Foldable (class Foldable, foldMap, foldl, intercalate)
+import Data.Foldable (class Foldable, foldl, intercalate)
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Monoid (power)
 import Data.String as String
 import Data.String.CodeUnits as SCU
 import Data.Tuple (Tuple(..))
+import Debug (spy)
 import Dodo (Doc)
 import Dodo as Dodo
 import Dodo.Internal (LocalOptions)
 import Tidy.Util (splitLines)
 
-data ForceBreak
-  = ForceNone
-  | ForceSpace
-  | ForceBreak
+data ForceBreak = ForceNone | ForceSpace | ForceBreak
 
 derive instance eqForceBreak :: Eq ForceBreak
 derive instance ordForceBreak :: Ord ForceBreak
 
-data FormatDoc a = FormatEmpty | FormatDoc ForceBreak Int Boolean (Doc a) ForceBreak
+newtype LeadingComment a = LeadingComment
+  { doc :: Doc a
+  , left :: ForceBreak
+  , lines :: Int
+  , multiline :: Boolean
+  , right :: ForceBreak
+  }
+
+newtype TrailingComment a = TrailingComment
+  { doc :: Doc a
+  , left :: ForceBreak
+  , multiline :: Boolean
+  , right :: ForceBreak
+  }
+
+instance Semigroup (LeadingComment a) where
+  append (LeadingComment c1) (LeadingComment c2) = do
+    let br = max c1.right c2.left
+    if c2.lines > 0 || br == ForceBreak then
+      LeadingComment c1
+        { doc = c1.doc <> breaks ForceBreak c2.lines <> c2.doc
+        , multiline = true
+        , right = c2.right
+        }
+    else
+      LeadingComment c1
+        { doc = c1.doc <> breakDoc br <> c2.doc
+        , multiline = c1.multiline || c2.multiline
+        , right = c2.right
+        }
+
+instance Monoid (LeadingComment a) where
+  mempty = LeadingComment
+    { doc: mempty
+    , left: ForceNone
+    , lines: 0
+    , multiline: false
+    , right: ForceNone
+    }
+
+instance Semigroup (TrailingComment a) where
+  append (TrailingComment c1) (TrailingComment c2) =
+    TrailingComment c1
+      { doc = c1.doc <> breakDoc (max c1.right c2.left) <> c2.doc
+      , multiline = c1.multiline || c2.multiline
+      , right = c2.right
+      }
+
+instance Monoid (TrailingComment a) where
+  mempty = TrailingComment
+    { doc: mempty
+    , left: ForceNone
+    , multiline: false
+    , right: ForceNone
+    }
+
+newtype FormatDoc a = FormatDoc
+  { doc :: Doc a
+  , isEmpty :: Boolean
+  , leading :: LeadingComment a
+  , multiline :: Boolean
+  , trailing :: TrailingComment a
+  }
 
 type FormatDocOperator a = FormatDoc a -> FormatDoc a -> FormatDoc a
 
@@ -63,23 +127,82 @@ instance semigroupFormatDoc :: Semigroup (FormatDoc a) where
   append = joinDoc (force identity)
 
 instance monoidFormatDoc :: Monoid (FormatDoc a) where
-  mempty = FormatEmpty
+  mempty = FormatDoc
+    { doc: mempty
+    , leading: mempty
+    , isEmpty: true
+    , multiline: false
+    , trailing: mempty
+    }
 
 fromDoc :: forall a. Doc a -> FormatDoc a
-fromDoc doc = FormatDoc ForceNone 0 false doc ForceNone
+fromDoc doc
+  | Dodo.isEmpty doc = mempty
+  | otherwise = FormatDoc
+      { doc
+      , leading: mempty
+      , isEmpty: false
+      , multiline: false
+      , trailing: mempty
+      }
 
 text :: forall a. String -> FormatDoc a
-text str = FormatDoc ForceNone 0 false (Dodo.text str) ForceNone
+text = fromDoc <<< Dodo.text
 
-leadingLineComment :: forall a. String -> FormatDoc a
-leadingLineComment str = FormatDoc ForceBreak 0 false (Dodo.text str) ForceBreak
+leadingLineComment :: forall a. String -> FormatDoc a -> FormatDoc a
+leadingLineComment str (FormatDoc doc) = FormatDoc doc
+  { leading = comm <> doc.leading
+  , isEmpty = false
+  }
+  where
+  comm = LeadingComment
+    { doc: Dodo.text str
+    , left: ForceBreak
+    , lines: 0
+    , multiline: false
+    , right: ForceBreak
+    }
 
-trailingLineComment :: forall a. String -> FormatDoc a
-trailingLineComment str = FormatDoc ForceSpace 0 false (Dodo.text str) ForceBreak
+trailingLineComment :: forall a. String -> FormatDoc a -> FormatDoc a
+trailingLineComment str (FormatDoc doc) = FormatDoc doc
+  { trailing = doc.trailing <> comm
+  , isEmpty = false
+  }
+  where
+  comm = TrailingComment
+    { doc: Dodo.text str
+    , left: ForceSpace
+    , multiline: false
+    , right: ForceBreak
+    }
 
-blockComment :: forall a. String -> FormatDoc a
-blockComment = splitLines >>> Array.uncons >>> foldMap \{ head, tail } -> do
-  let
+formatBlockComment :: forall a. String -> Tuple Boolean (Doc a)
+formatBlockComment = splitLines >>> Array.uncons >>> case _ of
+  Nothing ->
+    Tuple false mempty
+  Just { head, tail } ->
+    case prefixSpaces of
+      Nothing ->
+        Tuple false (Dodo.text head)
+      Just ind ->
+        Tuple true $ Dodo.withPosition \pos -> do
+          let newIndent = if ind < pos.indent then 0 else ind
+          let spaces = power " " newIndent
+          let tailDocs = map (\str -> Dodo.text $ fromMaybe str $ String.stripPrefix (String.Pattern spaces) str) tail
+          Dodo.lines
+            [ Dodo.text head
+            , Dodo.locally
+                ( \prev ->
+                    if newIndent < prev.indent then
+                      prev
+                        { indentSpaces = spaces
+                        , indent = newIndent
+                        }
+                    else prev
+                )
+                (intercalate Dodo.break tailDocs)
+            ]
+    where
     prefixSpaces =
       tail
         # Array.mapMaybe
@@ -89,87 +212,93 @@ blockComment = splitLines >>> Array.uncons >>> foldMap \{ head, tail } -> do
             )
         # Array.sort
         # Array.head
-  case prefixSpaces of
-    Nothing ->
-      FormatDoc ForceSpace 0 false (Dodo.text head) ForceSpace
-    Just ind ->
-      FormatDoc ForceSpace 0 true commentDoc ForceSpace
-      where
-      commentDoc = Dodo.withPosition \pos -> do
-        let newIndent = if ind < pos.indent then 0 else ind
-        let spaces = power " " newIndent
-        let tailDocs = map (\str -> Dodo.text $ fromMaybe str $ String.stripPrefix (String.Pattern spaces) str) tail
-        Dodo.lines
-          [ Dodo.text head
-          , Dodo.locally
-              ( \prev ->
-                  if newIndent < prev.indent then
-                    prev
-                      { indentSpaces = spaces
-                      , indent = newIndent
-                      }
-                  else prev
-              )
-              (intercalate Dodo.break tailDocs)
-          ]
+
+leadingBlockComment :: forall a. String -> FormatDoc a -> FormatDoc a
+leadingBlockComment str (FormatDoc doc) = FormatDoc doc
+  { leading = comm <> doc.leading
+  , isEmpty = false
+  }
+  where
+  Tuple multi commDoc =
+    formatBlockComment str
+
+  comm = LeadingComment
+    { doc: commDoc
+    , left: ForceSpace
+    , lines: 0
+    , multiline: multi
+    , right: ForceSpace
+    }
+
+trailingBlockComment :: forall a. String -> FormatDoc a -> FormatDoc a
+trailingBlockComment str (FormatDoc doc) = FormatDoc doc
+  { trailing = doc.trailing <> comm
+  , isEmpty = false
+  }
+  where
+  Tuple multi commDoc =
+    formatBlockComment str
+
+  comm = TrailingComment
+    { doc: commDoc
+    , left: ForceSpace
+    , multiline: multi
+    , right: ForceSpace
+    }
 
 anchor :: forall a. FormatDoc a -> FormatDoc a
-anchor = case _ of
-  FormatEmpty ->
-    FormatEmpty
-  FormatDoc fl n m doc fr ->
-    FormatDoc fl 0 (if n > 0 then true else m) doc fr
+anchor (FormatDoc doc) = case doc.leading of
+  LeadingComment comm | comm.lines > 0 ->
+    FormatDoc doc
+      { leading = LeadingComment comm { lines = 0 }
+      , multiline = true
+      }
+  _ ->
+    FormatDoc doc
 
 flatten :: forall a. FormatDoc a -> FormatDoc a
 flatten = flattenMax 0
 
 flattenMax :: forall a. Int -> FormatDoc a -> FormatDoc a
-flattenMax n' = case _ of
-  FormatEmpty ->
-    FormatEmpty
-  FormatDoc fl n m doc fr ->
-    FormatDoc fl (min n' n) m doc fr
-
-forceBreak :: forall a. FormatDoc a -> FormatDoc a
-forceBreak = case _ of
-  FormatEmpty ->
-    FormatEmpty
-  FormatDoc _ n m doc fr ->
-    FormatDoc ForceBreak n m doc fr
+flattenMax n (FormatDoc doc) = case doc.leading of
+  LeadingComment comm ->
+    FormatDoc doc
+      { leading = LeadingComment comm { lines = min comm.lines n }
+      }
 
 flexGroup :: forall a. FormatDoc a -> FormatDoc a
-flexGroup = case _ of
-  FormatEmpty ->
-    FormatEmpty
-  a@(FormatDoc fl n m doc fr)
-    | not m -> FormatDoc fl n false (Dodo.flexGroup doc) fr
-    | otherwise -> a
+flexGroup (FormatDoc doc)
+  | doc.multiline = FormatDoc doc
+  | otherwise = FormatDoc doc { doc = Dodo.flexGroup doc.doc }
 
 indent :: forall a. FormatDoc a -> FormatDoc a
-indent = mapDoc Dodo.indent
+indent = mapDocs Dodo.indent
 
 align :: forall a. Int -> FormatDoc a -> FormatDoc a
-align = mapDoc <<< Dodo.align
+align = mapDocs <<< Dodo.align
 
 alignCurrentColumn :: forall a. FormatDoc a -> FormatDoc a
-alignCurrentColumn = mapDoc Dodo.alignCurrentColumn
+alignCurrentColumn = mapDocs Dodo.alignCurrentColumn
 
 locally :: forall a. (LocalOptions -> LocalOptions) -> FormatDoc a -> FormatDoc a
-locally = mapDoc <<< Dodo.locally
+locally k (FormatDoc doc) = FormatDoc doc { doc = Dodo.locally k doc.doc }
 
 sourceBreak :: forall a. Int -> FormatDoc a -> FormatDoc a
-sourceBreak m = case _ of
-  FormatEmpty
-    | m <= 0 -> FormatEmpty
-    | otherwise -> FormatDoc ForceNone m false mempty ForceNone
-  FormatDoc fl n multi doc fr ->
-    FormatDoc fl (m + n) multi doc fr
+sourceBreak n (FormatDoc doc) = do
+  let LeadingComment comm = doc.leading
+  FormatDoc doc
+    { isEmpty = false
+    , leading = LeadingComment comm { lines = comm.lines + n }
+    }
 
 forceMinSourceBreaks :: forall a. Int -> FormatDoc a -> FormatDoc a
-forceMinSourceBreaks m = case _ of
-  FormatEmpty -> FormatEmpty
-  FormatDoc fl n multi doc fr ->
-    FormatDoc fl (max m n) multi doc fr
+forceMinSourceBreaks n (FormatDoc doc)
+  | doc.isEmpty = FormatDoc doc
+  | otherwise = do
+      let LeadingComment comm = doc.leading
+      FormatDoc doc
+        { leading = LeadingComment comm { lines = max comm.lines n }
+        }
 
 space :: forall a. FormatDocOperator a
 space = joinDoc (force (append Dodo.space))
@@ -242,32 +371,64 @@ softSpace = joinDoc \f m doc -> case f of
 -- | right associativity. You will always get double breaks when used
 -- | with left associativity.
 flexDoubleBreak :: forall a. FormatDocOperator a
-flexDoubleBreak = case _, _ of
-  FormatEmpty, b -> b
-  a, FormatEmpty -> a
-  FormatDoc fl1 n1 m1 doc1 _, FormatDoc _ n2 _ doc2 fr2
-    | n2 >= 2 || m1 ->
-        FormatDoc fl1 n1 true (doc1 <> Dodo.break <> Dodo.break <> doc2) fr2
-    | otherwise ->
-        FormatDoc fl1 n1 true (Dodo.flexSelect doc1 mempty Dodo.break <> Dodo.break <> doc2) fr2
+flexDoubleBreak (FormatDoc doc1) (FormatDoc doc2)
+  | doc1.isEmpty = FormatDoc doc2
+  | doc2.isEmpty = FormatDoc doc1
+  | otherwise = do
+      let TrailingComment comm1 = doc1.trailing
+      let LeadingComment comm2 = doc2.leading
+      let docLeft = doc1.doc <> breakDoc comm1.left <> comm1.doc
+      let docRight = comm2.doc <> breakDoc comm2.right <> doc2.doc
+      if comm2.lines >= 2 || doc1.multiline then
+        FormatDoc doc1
+          { doc = docLeft <> Dodo.break <> Dodo.break <> docRight
+          , multiline = true
+          , trailing = doc2.trailing
+          }
+      else
+        FormatDoc doc1
+          { doc = Dodo.flexSelect docLeft mempty Dodo.break <> Dodo.break <> docRight
+          , multiline = true
+          , trailing = doc2.trailing
+          }
 
 isEmpty :: forall a. FormatDoc a -> Boolean
-isEmpty = case _ of
-  FormatEmpty -> true
-  _ -> false
+isEmpty (FormatDoc doc) = doc.isEmpty
+
+breakDoc :: forall a. ForceBreak -> Doc a
+breakDoc = case _ of
+  ForceBreak -> Dodo.break
+  ForceSpace -> Dodo.space
+  ForceNone -> mempty
+
+breaks :: forall a. ForceBreak -> Int -> Doc a
+breaks fl n
+  | n >= 2 = Dodo.break <> Dodo.break
+  | n == 1 = Dodo.break
+  | otherwise = breakDoc fl
 
 joinDoc :: forall a. (ForceBreak -> Boolean -> Doc a -> Tuple Boolean (Doc a)) -> FormatDocOperator a
-joinDoc spc = case _, _ of
-  FormatEmpty, b -> b
-  a, FormatEmpty -> a
-  FormatDoc fl1 n1 m1 doc1 fr1, FormatDoc fl2 n2 m2 doc2 fr2
-    | n2 == 1 ->
-        FormatDoc fl1 n1 true (doc1 <> Dodo.break <> doc2) fr2
-    | n2 >= 2 ->
-        FormatDoc fl1 n1 true (doc1 <> Dodo.break <> Dodo.break <> doc2) fr2
-    | otherwise -> do
-        let (Tuple m3 doc3) = spc (max fr1 fl2) m2 doc2
-        FormatDoc fl1 n1 (m1 || m3) (doc1 <> doc3) fr2
+joinDoc spaceFn (FormatDoc doc1) (FormatDoc doc2)
+  | doc1.isEmpty = FormatDoc doc2
+  | doc2.isEmpty = FormatDoc doc1
+  | otherwise = do
+      let TrailingComment comm1 = doc1.trailing
+      let LeadingComment comm2 = doc2.leading
+      let docLeft = doc1.doc <> breakDoc comm1.left <> comm1.doc
+      let docRight = comm2.doc <> breakDoc comm2.right <> doc2.doc
+      if comm2.lines > 0 then
+        FormatDoc doc1
+          { doc = docLeft <> breaks ForceBreak comm2.lines <> docRight
+          , multiline = true
+          , trailing= doc2.trailing
+          }
+      else do
+        let Tuple m3 doc3 = spaceFn (max comm1.right comm2.left) (comm2.multiline || doc2.multiline) docRight
+        FormatDoc doc1
+          { doc = docLeft <> doc3
+          , multiline = comm1.multiline || doc1.multiline || m3
+          , trailing= doc2.trailing
+          }
 
 force :: forall a. (Doc a -> Doc a) -> (ForceBreak -> Boolean -> Doc a -> Tuple Boolean (Doc a))
 force k f m doc = case f of
@@ -276,17 +437,34 @@ force k f m doc = case f of
   _ ->
     Tuple m (k doc)
 
-mapDoc :: forall a b. (Doc a -> Doc b) -> FormatDoc a -> FormatDoc b
-mapDoc k = case _ of
-  FormatEmpty ->
-    FormatEmpty
-  FormatDoc fl n m doc fr ->
-    FormatDoc fl n m (k doc) fr
+mapDoc :: forall a. (Doc a -> Doc a) -> FormatDoc a -> FormatDoc a
+mapDoc k (FormatDoc doc)
+  | doc.isEmpty = FormatDoc doc
+  | otherwise = FormatDoc doc { doc = k doc.doc }
+
+mapDocs :: forall a. (Doc a -> Doc a) -> FormatDoc a -> FormatDoc a
+mapDocs k (FormatDoc doc)
+  | doc.isEmpty = FormatDoc doc
+  | otherwise = do
+      let LeadingComment comm1 = doc.leading
+      let TrailingComment comm2 = doc.trailing
+      FormatDoc doc
+        { doc = k doc.doc
+        , leading = LeadingComment comm1 { doc = k comm1.doc }
+        , trailing = TrailingComment comm2 { doc = k comm2.doc }
+        }
 
 toDoc :: forall a. FormatDoc a -> Doc a
-toDoc = case _ of
-  FormatEmpty -> mempty
-  FormatDoc _ _ _ doc _ -> doc
+toDoc (FormatDoc doc)
+  | doc.isEmpty = mempty
+  | otherwise = do
+      let LeadingComment comm1 = doc.leading
+      let TrailingComment comm2 = doc.trailing
+      comm1.doc
+        <> breakDoc comm1.right
+        <> doc.doc
+        <> breakDoc comm2.left
+        <> comm2.doc
 
 joinWithMap
   :: forall f a b

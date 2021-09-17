@@ -21,8 +21,7 @@ import Data.Maybe (maybe)
 import Data.Tuple (Tuple(..), fst, snd)
 import Dodo (Doc)
 import Dodo as Dodo
-import Partial.Unsafe (unsafeCrashWith)
-import Tidy.Doc (ForceBreak(..), FormatDoc(..), align, break, flatten, flexGroup, forceBreak, indent)
+import Tidy.Doc (ForceBreak(..), FormatDoc(..), LeadingComment(..), TrailingComment(..), align, break, breakDoc, flatten, flexGroup, forceMinSourceBreaks, indent)
 
 data HangingDoc a
   = HangBreak (FormatDoc a)
@@ -188,7 +187,7 @@ toFormatDoc = fst <<< goInit
         { init, last } = NonEmptyArray.unsnoc tail
         next = Array.foldr goInitApp (goLastApp last) init
         this = fst $ goInit $ case head of
-          HangApp _ _ _ -> overHangHead forceBreak head
+          HangApp _ _ _ -> overHangHead (forceMinSourceBreaks 1) head
           _ -> head
         docIndent = indMulti head ind (fst next)
         docGroup = flexSelectJoin this (fst next) docIndent
@@ -204,43 +203,134 @@ toFormatDoc = fst <<< goInit
         docBreak = flexSelectJoin (prevInd this) (prevAlgn docIndent) (prevInd docIndent)
       Tuple docGroup docBreak
 
-  flexSelect = case _, _, _ of
-    FormatDoc fl1 n1 m1 doc1 fr1, FormatDoc fl2 n2 m2 doc2 fr2, FormatDoc fl3 n3 m3 doc3 fr3 -> do
-      let
-        doc2' = breaks (max fr1 fl2) n2 <> doc2
-        doc3' = breaks (max fr1 fl3) n3 <> doc3
-      FormatDoc fl1 n1 (m1 || (m2 && m3))
-        (Dodo.flexSelect doc1 doc2' doc3')
-        (max fr2 fr3)
-    _, _, _ ->
-      unsafeCrashWith "flexSelect/FormatEmpty"
+  flexSelect (FormatDoc doc1) (FormatDoc doc2) (FormatDoc doc3) = do
+    let
+      TrailingComment comm1r = doc1.trailing
 
-  flexSelectJoin = case _, _, _ of
-    FormatDoc fl1 n1 m1 doc1 fr1, FormatDoc fl2 n2 m2 doc2 fr2, FormatDoc fl3 n3 m3 doc3 fr3 -> do
-      let
-        doc2' = breaks (max fr1 fl2) n2 <> doc2
-        doc3' = breaks (max fr1 fl3) n3 <> doc3
-        br = if fl1 == ForceBreak || n1 > 0 then Dodo.break else Dodo.spaceBreak
-      FormatDoc ForceNone 0 (m1 || (m2 && m3))
-        (Dodo.flexSelect (br <> doc1) doc2' doc3')
-        (max fr2 fr3)
-    _, _, _ ->
-      unsafeCrashWith "flexSelect/FormatEmpty"
+      doc1' =
+        doc1.doc
+          <> breakDoc comm1r.left
+          <> comm1r.doc
 
-  docJoin = case _ of
-    FormatEmpty -> FormatEmpty
-    fdoc@(FormatDoc fl n m doc fr) ->
-      if fl == ForceBreak || n > 0 then fdoc
-      else if m then FormatDoc ForceBreak n m doc fr
-      else FormatDoc ForceNone 0 false (Dodo.spaceBreak <> doc) fr
+      LeadingComment comm2l = doc2.leading
+      TrailingComment comm2r = doc2.trailing
+
+      doc2' =
+        breaks (max comm1r.right comm2l.left) comm2l.lines
+          <> comm2l.doc
+          <> breakDoc comm2l.right
+          <> doc2.doc
+          <> breakDoc comm2r.left
+          <> comm2r.doc
+
+      LeadingComment comm3l = doc3.leading
+      TrailingComment comm3r = doc3.trailing
+
+      doc3' =
+        breaks (max comm1r.right comm3l.left) comm3l.lines
+          <> comm3l.doc
+          <> breakDoc comm2l.right
+          <> doc3.doc
+          <> breakDoc comm3r.left
+          <> comm3r.doc
+
+      m1 = doc1.multiline || comm1r.multiline
+      m2 = comm2l.multiline || doc2.multiline || comm2r.multiline
+      m3 = comm3l.multiline || doc3.multiline || comm3r.multiline
+
+    FormatDoc
+      { doc: Dodo.flexSelect doc1' doc2' doc3'
+      , leading: doc1.leading
+      , isEmpty: false
+      , multiline: m1 || (m2 && m3)
+      , trailing:
+          TrailingComment
+            { doc: mempty
+            , left: ForceNone
+            , multiline: false
+            , right: max comm2r.right comm3r.right
+            }
+      }
+
+  flexSelectJoin (FormatDoc doc1) (FormatDoc doc2) (FormatDoc doc3) = do
+    let
+      LeadingComment comm1l = doc1.leading
+      TrailingComment comm1r = doc1.trailing
+
+      break
+        | comm1l.left == ForceBreak || comm1l.lines > 0 = Dodo.break
+        | otherwise = Dodo.spaceBreak
+
+      doc1' =
+        break
+          <> comm1l.doc
+          <> breakDoc comm1l.right
+          <> doc1.doc
+          <> breakDoc comm1r.left
+          <> comm1r.doc
+
+      LeadingComment comm2l = doc2.leading
+      TrailingComment comm2r = doc2.trailing
+
+      doc2' =
+        breaks (max comm1r.right comm2l.left) comm2l.lines
+          <> comm2l.doc
+          <> breakDoc comm2l.right
+          <> doc2.doc
+          <> breakDoc comm2r.left
+          <> comm2r.doc
+
+      LeadingComment comm3l = doc3.leading
+      TrailingComment comm3r = doc3.trailing
+
+      doc3' =
+        breaks (max comm1r.right comm3l.left) comm3l.lines
+          <> comm3l.doc
+          <> breakDoc comm2l.right
+          <> doc3.doc
+          <> breakDoc comm3r.left
+          <> comm3r.doc
+
+      m1 = comm1l.multiline || doc1.multiline || comm1r.multiline
+      m2 = comm2l.multiline || doc2.multiline || comm2r.multiline
+      m3 = comm3l.multiline || doc3.multiline || comm3r.multiline
+
+    FormatDoc
+      { doc: Dodo.flexSelect doc1' doc2' doc3'
+      , leading: mempty
+      , isEmpty: false
+      , multiline: m1 || (m2 && m3)
+      , trailing:
+          TrailingComment
+            { doc: mempty
+            , left: ForceNone
+            , multiline: false
+            , right: max comm2r.right comm3r.right
+            }
+      }
+
+  docJoin fdoc@(FormatDoc doc)
+    | doc.isEmpty = fdoc
+    | otherwise = do
+        let LeadingComment comm = doc.leading
+        if comm.left == ForceBreak || comm.lines > 0 then
+          fdoc
+        else if comm.multiline || doc.multiline then
+          forceMinSourceBreaks 1 fdoc
+        else
+          FormatDoc doc
+            { doc = Dodo.spaceBreak <> comm.doc <> breakDoc comm.right <> doc.doc
+            , leading = mempty
+            }
 
   realignOp op doc = case op, hangHead doc of
-    FormatDoc fl1 n1 _ _ fr1, FormatDoc fl2 n2 m2 _ _
-      | fl1 /= ForceBreak && n1 == 0 && fr1 /= ForceBreak && fl2 /= ForceBreak && n2 > 0 ->
-          realignOp (forceBreak op) (overHangHead flatten doc)
+    FormatDoc doc1@{ leading: LeadingComment comm1, trailing: TrailingComment comm2 },
+    FormatDoc { leading: LeadingComment comm3 }
+      | comm1.left /= ForceBreak && comm1.lines == 0 && comm2.right /= ForceBreak && comm3.left /= ForceBreak && comm3.lines > 0 ->
+          realignOp (forceMinSourceBreaks 1 op) (overHangHead flatten doc)
       | HangBreak _ <- doc
-      , fr1 /= ForceBreak && fl2 /= ForceBreak && n2 == 0 && m2 ->
-          Tuple op (overHangHead forceBreak doc)
+      , comm2.right /= ForceBreak && comm3.left /= ForceBreak && comm3.lines == 0 && (comm3.multiline || doc1.multiline) ->
+          Tuple op (overHangHead (forceMinSourceBreaks 1) doc)
     _, _ ->
       Tuple op doc
 

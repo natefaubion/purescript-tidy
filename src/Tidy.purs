@@ -32,7 +32,7 @@ import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
 import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), Proper, QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
-import Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, blockComment, break, flattenMax, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingLineComment)
+import Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, break, flattenMax, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingBlockComment, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingBlockComment, trailingLineComment)
 import Tidy.Doc (FormatDoc, toDoc) as Exports
 import Tidy.Hang (HangingDoc, HangingOp(..), hang, hangApp, hangBreak, hangOps, hangWithIndent)
 import Tidy.Hang as Hang
@@ -125,13 +125,19 @@ type Format f e a = FormatOptions e a -> f -> FormatDoc a
 type FormatHanging f e a = FormatOptions e a -> f -> HangingDoc a
 type FormatSpace a = FormatDoc a -> FormatDoc a -> FormatDoc a
 
-formatComment :: forall l a. (String -> FormatDoc a) -> Comment l -> FormatDoc a -> FormatDoc a
-formatComment lineComment com next = case com of
+formatComment
+  :: forall l a
+   . (String -> FormatDoc a -> FormatDoc a)
+  -> (String -> FormatDoc a -> FormatDoc a)
+  -> Comment l
+  -> FormatDoc a
+  -> FormatDoc a
+formatComment lineComment blockComment com next = case com of
   Comment str
     | SCU.take 2 str == "--" ->
-        lineComment str `break` next
+        lineComment str next
     | otherwise ->
-        blockComment str `space` next
+        blockComment str next
   Line _ n ->
     sourceBreak n next
   Space _ ->
@@ -140,8 +146,8 @@ formatComment lineComment com next = case com of
 formatWithComments :: forall a. Array (Comment LineFeed) -> Array (Comment Void) -> FormatDoc a -> FormatDoc a
 formatWithComments leading trailing doc =
   foldr
-    (formatComment leadingLineComment)
-    (doc `space` foldr (formatComment trailingLineComment) mempty trailing)
+    (formatComment leadingLineComment leadingBlockComment)
+    (doc `space` foldr (formatComment trailingLineComment trailingBlockComment) mempty trailing)
     leading
 
 formatToken :: forall a r. { unicode :: UnicodeOption | r } -> SourceToken -> FormatDoc a
@@ -188,7 +194,7 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
         ImportWrapSource ->
           locally (_ { pageWidth = top, ribbonRatio = 1.0 }) imports
     , forceMinSourceBreaks 2 $ formatTopLevelGroups conf body.decls
-    , foldr (formatComment leadingLineComment) mempty body.trailingComments
+    , foldr (formatComment leadingLineComment leadingBlockComment) mempty body.trailingComments
     ]
   where
   imports =
@@ -987,7 +993,7 @@ formatDoStatement conf = case _ of
     formatExpr conf expr
   DoBind binder tok expr ->
     flexGroup (formatBinder conf binder)
-      `space` Hang.toFormatDoc do
+      `space`  Hang.toFormatDoc do
         indent (anchor (formatToken conf tok)) `hang` formatHangingExpr conf expr
   DoError e ->
     conf.formatError e
@@ -1066,7 +1072,7 @@ formatParens format conf (Wrapped { open, value, close }) =
 
 formatParensBlock :: forall e a b. Format b e a -> Format (Wrapped b) e a
 formatParensBlock format conf (Wrapped { open, value, close }) =
-  commentedFlexGroup open softSpace conf do
+  flexGroup $ formatToken conf open `softSpace` do
     align 2 (anchor (format conf value))
       `softBreak` formatToken conf close
 
@@ -1109,7 +1115,8 @@ formatList :: forall e a b. FormatSpace a -> FormatSpace a -> Int -> FormatGroup
 formatList openSpace closeSpace alignment grouped format conf { open, head, tail, close } =
   case grouped of
     Grouped ->
-      commentedFlexGroup open openSpace conf listElems
+      flexGroup $ formatToken conf open
+        `openSpace` listElems
     NotGrouped ->
       formatToken conf open
         `openSpace` listElems
@@ -1153,14 +1160,6 @@ toQualifiedOperatorTree precMap opNs =
 
 overLabel :: forall a b c. (a -> b) -> Labeled a c -> Labeled b c
 overLabel k (Labeled lbl) = Labeled lbl { label = k lbl.label }
-
--- TODO: Properly fix this grouping issue by buffering comments in FormatDoc.
--- This would let us group the semantic elements of the doc and not the comments.
-commentedFlexGroup :: forall e a. SourceToken -> FormatSpace a -> Format (FormatDoc a) e a
-commentedFlexGroup tok spc conf doc =
-  formatWithComments tok.leadingComments [] $ flexGroup do
-    formatToken conf (tok { leadingComments = [] })
-      `spc` doc
 
 data DeclGroup
   = DeclGroupValueSignature Ident

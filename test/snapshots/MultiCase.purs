@@ -9,3 +9,8 @@ test = case _, _ of
              , c
              } ->
     a <> b <> c
+
+test = case _, _ of
+  -- Comment
+  Foo a, Bar b ->
+    a <> b

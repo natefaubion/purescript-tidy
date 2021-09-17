@@ -8,8 +8,10 @@ type Ok = String
 type Ok2 :: Type
 type Ok2 = String
 
+-- Comment
 type Ok3 = String
 type Ok4 = Int
+type OK5 = Int
 
 class Foo a where
   foo :: a
@@ -62,8 +64,10 @@ type Ok = String
 type Ok2 :: Type
 type Ok2 = String
 
+-- Comment
 type Ok3 = String
 type Ok4 = Int
+type OK5 = Int
 
 class Foo a where
   foo :: a
