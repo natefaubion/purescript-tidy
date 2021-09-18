@@ -1,6 +1,18 @@
 module MultilineStringLiterals where
 
+test = """ """
+
 test = """
+this is a string
+"""
+
+test = """
+this is a string
+
+this is a string
+
+
+
 this is a string
 """
 

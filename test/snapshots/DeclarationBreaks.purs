@@ -5,8 +5,10 @@ import Bar
 type Ok = String
 type Ok2 :: Type
 type Ok2 = String
+-- Comment
 type Ok3 = String
 type Ok4 = Int
+type OK5 = Int
 class Foo a where foo :: a
 instance Foo Int where foo = 12
 else instance Foo String where foo = "foo"
