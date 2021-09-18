@@ -161,8 +161,14 @@ formatToken conf tok = formatWithComments tok.leadingComments tok.trailingCommen
 
 formatRawString :: forall a. String -> FormatDoc a
 formatRawString = splitLines >>> Array.uncons >>> foldMap \{ head, tail } ->
-  text head `break` locally (_ { indent = 0, indentSpaces = "" }) do
-    joinWithMap break text tail
+  if Array.null tail then
+    text head
+  else
+    fromDoc $ Dodo.lines
+      [ Dodo.text head
+      , Dodo.locally (_ { indent = 0, indentSpaces = "" }) do
+          Array.intercalate Dodo.break $ Dodo.text <$> tail
+      ]
 
 formatString :: forall a. String -> FormatDoc a
 formatString = splitStringEscapeLines >>> Array.uncons >>> foldMap \{ head, tail } ->
