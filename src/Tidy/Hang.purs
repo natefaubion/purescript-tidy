@@ -209,8 +209,7 @@ toFormatDoc = fst <<< goInit
 
       doc1' =
         doc1.doc
-          <> breakDoc comm1r.left
-          <> comm1r.doc
+          <> breakDoc comm1r.left comm1r.doc
 
       LeadingComment comm2l = doc2.leading
       TrailingComment comm2r = doc2.trailing
@@ -218,10 +217,8 @@ toFormatDoc = fst <<< goInit
       doc2' =
         breaks (max comm1r.right comm2l.left) comm2l.lines
           <> comm2l.doc
-          <> breakDoc comm2l.right
-          <> doc2.doc
-          <> breakDoc comm2r.left
-          <> comm2r.doc
+          <> breakDoc comm2l.right doc2.doc
+          <> breakDoc comm2r.left comm2r.doc
 
       LeadingComment comm3l = doc3.leading
       TrailingComment comm3r = doc3.trailing
@@ -229,10 +226,8 @@ toFormatDoc = fst <<< goInit
       doc3' =
         breaks (max comm1r.right comm3l.left) comm3l.lines
           <> comm3l.doc
-          <> breakDoc comm2l.right
-          <> doc3.doc
-          <> breakDoc comm3r.left
-          <> comm3r.doc
+          <> breakDoc comm2l.right doc3.doc
+          <> breakDoc comm3r.left comm3r.doc
 
       m1 = doc1.multiline || comm1r.multiline
       m2 = comm2l.multiline || doc2.multiline || comm2r.multiline
@@ -264,10 +259,8 @@ toFormatDoc = fst <<< goInit
       doc1' =
         break
           <> comm1l.doc
-          <> breakDoc comm1l.right
-          <> doc1.doc
-          <> breakDoc comm1r.left
-          <> comm1r.doc
+          <> breakDoc comm1l.right doc1.doc
+          <> breakDoc comm1r.left comm1r.doc
 
       LeadingComment comm2l = doc2.leading
       TrailingComment comm2r = doc2.trailing
@@ -275,10 +268,8 @@ toFormatDoc = fst <<< goInit
       doc2' =
         breaks (max comm1r.right comm2l.left) comm2l.lines
           <> comm2l.doc
-          <> breakDoc comm2l.right
-          <> doc2.doc
-          <> breakDoc comm2r.left
-          <> comm2r.doc
+          <> breakDoc comm2l.right doc2.doc
+          <> breakDoc comm2r.left comm2r.doc
 
       LeadingComment comm3l = doc3.leading
       TrailingComment comm3r = doc3.trailing
@@ -286,10 +277,8 @@ toFormatDoc = fst <<< goInit
       doc3' =
         breaks (max comm1r.right comm3l.left) comm3l.lines
           <> comm3l.doc
-          <> breakDoc comm2l.right
-          <> doc3.doc
-          <> breakDoc comm3r.left
-          <> comm3r.doc
+          <> breakDoc comm2l.right doc3.doc
+          <> breakDoc comm3r.left comm3r.doc
 
       m1 = comm1l.multiline || doc1.multiline || comm1r.multiline
       m2 = comm2l.multiline || doc2.multiline || comm2r.multiline
@@ -319,7 +308,7 @@ toFormatDoc = fst <<< goInit
           forceMinSourceBreaks 1 fdoc
         else
           FormatDoc doc
-            { doc = Dodo.spaceBreak <> comm.doc <> breakDoc comm.right <> doc.doc
+            { doc = Dodo.spaceBreak <> comm.doc <> breakDoc comm.right doc.doc
             , leading = mempty
             }
 

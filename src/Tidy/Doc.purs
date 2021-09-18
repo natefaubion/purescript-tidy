@@ -72,20 +72,36 @@ newtype TrailingComment a = TrailingComment
   }
 
 instance Semigroup (LeadingComment a) where
-  append (LeadingComment c1) (LeadingComment c2) = do
-    let br = max c1.right c2.left
-    if c2.lines > 0 || br == ForceBreak then
-      LeadingComment c1
-        { doc = c1.doc <> breaks ForceBreak c2.lines <> c2.doc
-        , multiline = true
-        , right = c2.right
-        }
-    else
-      LeadingComment c1
-        { doc = c1.doc <> breakDoc br <> c2.doc
-        , multiline = c1.multiline || c2.multiline
-        , right = c2.right
-        }
+  append (LeadingComment c1) (LeadingComment c2)
+    | Dodo.isEmpty c1.doc =
+        LeadingComment c2
+          { left = max c1.left c2.left
+          , lines = c1.lines + c2.lines
+          }
+    | Dodo.isEmpty c2.doc =
+        LeadingComment c1
+          { doc = c1.doc <> breaks ForceNone c2.lines
+          , multiline = c1.multiline || c2.lines > 0
+          , right =
+              if c2.lines > 0 then
+                ForceNone
+              else
+                max c1.right c2.right
+          }
+    | otherwise = do
+        let br = max c1.right c2.left
+        if c2.lines > 0 || br == ForceBreak then
+          LeadingComment c1
+            { doc = c1.doc <> breaks ForceBreak c2.lines <> c2.doc
+            , multiline = true
+            , right = c2.right
+            }
+        else
+          LeadingComment c1
+            { doc = c1.doc <> breakDoc br c2.doc
+            , multiline = c1.multiline || c2.multiline
+            , right = c2.right
+            }
 
 instance Monoid (LeadingComment a) where
   mempty = LeadingComment
@@ -97,12 +113,17 @@ instance Monoid (LeadingComment a) where
     }
 
 instance Semigroup (TrailingComment a) where
-  append (TrailingComment c1) (TrailingComment c2) =
-    TrailingComment c1
-      { doc = c1.doc <> breakDoc (max c1.right c2.left) <> c2.doc
-      , multiline = c1.multiline || c2.multiline
-      , right = c2.right
-      }
+  append (TrailingComment c1) (TrailingComment c2)
+    | Dodo.isEmpty c1.doc =
+        TrailingComment c2 { left = max c1.left c2.left }
+    | Dodo.isEmpty c2.doc =
+        TrailingComment c1 { right = max c1.right c2.right }
+    | otherwise =
+        TrailingComment c1
+          { doc = c1.doc <> breakDoc (max c1.right c2.left) c2.doc
+          , multiline = c1.multiline || c2.multiline
+          , right = c2.right
+          }
 
 instance Monoid (TrailingComment a) where
   mempty = TrailingComment
@@ -164,7 +185,7 @@ leadingLineComment str (FormatDoc doc) = FormatDoc doc
 
 trailingLineComment :: forall a. String -> FormatDoc a -> FormatDoc a
 trailingLineComment str (FormatDoc doc) = FormatDoc doc
-  { trailing = doc.trailing <> comm
+  { trailing = comm <> doc.trailing
   , isEmpty = false
   }
   where
@@ -231,7 +252,7 @@ leadingBlockComment str (FormatDoc doc) = FormatDoc doc
 
 trailingBlockComment :: forall a. String -> FormatDoc a -> FormatDoc a
 trailingBlockComment str (FormatDoc doc) = FormatDoc doc
-  { trailing = doc.trailing <> comm
+  { trailing = comm <> doc.trailing
   , isEmpty = false
   }
   where
@@ -376,8 +397,8 @@ flexDoubleBreak (FormatDoc doc1) (FormatDoc doc2)
   | otherwise = do
       let TrailingComment comm1 = doc1.trailing
       let LeadingComment comm2 = doc2.leading
-      let docLeft = doc1.doc <> breakDoc comm1.left <> comm1.doc
-      let docRight = comm2.doc <> breakDoc comm2.right <> doc2.doc
+      let docLeft = doc1.doc <> breakDoc comm1.left comm1.doc
+      let docRight = comm2.doc <> breakDoc comm2.right doc2.doc
       if comm2.lines >= 2 || doc1.multiline then
         FormatDoc doc1
           { doc = docLeft <> Dodo.break <> Dodo.break <> docRight
@@ -394,17 +415,22 @@ flexDoubleBreak (FormatDoc doc1) (FormatDoc doc2)
 isEmpty :: forall a. FormatDoc a -> Boolean
 isEmpty (FormatDoc doc) = doc.isEmpty
 
-breakDoc :: forall a. ForceBreak -> Doc a
-breakDoc = case _ of
-  ForceBreak -> Dodo.break
-  ForceSpace -> Dodo.space
-  ForceNone -> mempty
+breakDoc :: forall a. ForceBreak -> Doc a -> Doc a
+breakDoc br doc
+  | Dodo.isEmpty doc = doc
+  | otherwise = case br of
+      ForceBreak -> Dodo.break <> doc
+      ForceSpace -> Dodo.space <> doc
+      ForceNone -> doc
 
 breaks :: forall a. ForceBreak -> Int -> Doc a
 breaks fl n
   | n >= 2 = Dodo.break <> Dodo.break
   | n == 1 = Dodo.break
-  | otherwise = breakDoc fl
+  | otherwise = case fl of
+      ForceBreak -> Dodo.break
+      ForceSpace -> Dodo.space
+      ForceNone -> mempty
 
 joinDoc :: forall a. (ForceBreak -> Boolean -> Doc a -> Tuple Boolean (Doc a)) -> FormatDocOperator a
 joinDoc spaceFn (FormatDoc doc1) (FormatDoc doc2)
@@ -413,8 +439,8 @@ joinDoc spaceFn (FormatDoc doc1) (FormatDoc doc2)
   | otherwise = do
       let TrailingComment comm1 = doc1.trailing
       let LeadingComment comm2 = doc2.leading
-      let docLeft = doc1.doc <> breakDoc comm1.left <> comm1.doc
-      let docRight = comm2.doc <> breakDoc comm2.right <> doc2.doc
+      let docLeft = doc1.doc <> breakDoc comm1.left comm1.doc
+      let docRight = comm2.doc <> breakDoc comm2.right doc2.doc
       if comm2.lines > 0 then
         FormatDoc doc1
           { doc = docLeft <> breaks ForceBreak comm2.lines <> docRight
@@ -460,10 +486,8 @@ toDoc (FormatDoc doc)
       let LeadingComment comm1 = doc.leading
       let TrailingComment comm2 = doc.trailing
       comm1.doc
-        <> breakDoc comm1.right
-        <> doc.doc
-        <> breakDoc comm2.left
-        <> comm2.doc
+        <> breakDoc comm1.right doc.doc
+        <> breakDoc comm2.left comm2.doc
 
 joinWithMap
   :: forall f a b

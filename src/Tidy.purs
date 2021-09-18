@@ -147,7 +147,7 @@ formatWithComments :: forall a. Array (Comment LineFeed) -> Array (Comment Void)
 formatWithComments leading trailing doc =
   foldr
     (formatComment leadingLineComment leadingBlockComment)
-    (doc `space` foldr (formatComment trailingLineComment trailingBlockComment) mempty trailing)
+    (doc <> foldr (formatComment trailingLineComment trailingBlockComment) mempty trailing)
     leading
 
 formatToken :: forall a r. { unicode :: UnicodeOption | r } -> SourceToken -> FormatDoc a
