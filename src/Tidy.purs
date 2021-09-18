@@ -999,7 +999,7 @@ formatDoStatement conf = case _ of
     formatExpr conf expr
   DoBind binder tok expr ->
     flexGroup (formatBinder conf binder)
-      `space`  Hang.toFormatDoc do
+      `space` Hang.toFormatDoc do
         indent (anchor (formatToken conf tok)) `hang` formatHangingExpr conf expr
   DoError e ->
     conf.formatError e

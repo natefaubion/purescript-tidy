@@ -445,14 +445,14 @@ joinDoc spaceFn (FormatDoc doc1) (FormatDoc doc2)
         FormatDoc doc1
           { doc = docLeft <> breaks ForceBreak comm2.lines <> docRight
           , multiline = true
-          , trailing= doc2.trailing
+          , trailing = doc2.trailing
           }
       else do
         let Tuple m3 doc3 = spaceFn (max comm1.right comm2.left) (comm2.multiline || doc2.multiline) docRight
         FormatDoc doc1
           { doc = docLeft <> doc3
           , multiline = comm1.multiline || doc1.multiline || m3
-          , trailing= doc2.trailing
+          , trailing = doc2.trailing
           }
 
 force :: forall a. (Doc a -> Doc a) -> (ForceBreak -> Boolean -> Doc a -> Tuple Boolean (Doc a))
