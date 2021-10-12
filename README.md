@@ -61,7 +61,7 @@ operators, you can generate your own table using the `generate-operators`
 command.
 
 ```console
-$ purs-tidy generate-operators $(spago sources) > .tidyoperators
+$ spago sources | xargs purs-tidy generate-operators > .tidyoperators
 $ purs-tidy generate-config --arrow-first --unicode-never --operators .tidyoperators
 ```
 
