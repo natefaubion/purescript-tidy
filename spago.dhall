@@ -8,6 +8,7 @@
   , "lists"
   , "maybe"
   , "ordered-collections"
+  , "orders"
   , "partial"
   , "prelude"
   , "purescript-language-cst-parser"
