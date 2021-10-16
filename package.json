@@ -1,6 +1,6 @@
 {
   "name": "purs-tidy",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "description": "A syntax tidy-upper (formatter) for PureScript.",
   "bin": {
     "purs-tidy": "bin/index.js"
