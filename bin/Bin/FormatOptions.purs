@@ -134,6 +134,7 @@ fromJson json = do
 toJson :: FormatOptions -> Json
 toJson options =
   jsonEmptyObject
+    # extend (assoc "importSort" (importSortToString options.importSort))
     # extend (assoc "importWrap" (importWrapToString options.importWrap))
     # extend (assoc "indent" options.indent)
     # extend (assoc "operatorsFile" (maybe jsonNull encodeJson options.operatorsFile))
