@@ -27,6 +27,7 @@
   , "node-process"
   , "node-workerbees"
   , "ordered-collections"
+  , "orders"
   , "partial"
   , "posix-types"
   , "prelude"

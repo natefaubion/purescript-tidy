@@ -2,6 +2,7 @@ module Tidy
   ( FormatOptions
   , defaultFormatOptions
   , TypeArrowOption(..)
+  , ImportSortOption(..)
   , ImportWrapOption(..)
   , Format
   , formatModule
@@ -26,14 +27,17 @@ import Data.Map as Map
 import Data.Maybe (Maybe(..), maybe)
 import Data.Monoid (power)
 import Data.Monoid as Monoid
+import Data.Newtype (un)
+import Data.Ord.Down (Down(..))
 import Data.String.CodeUnits as SCU
-import Data.Tuple (Tuple(..), fst)
+import Data.Tuple (Tuple(..), fst, snd)
 import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), Name(..), OneOrDelimited(..), Operator, PatternGuard(..), Proper, QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
+import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), OneOrDelimited(..), Operator, PatternGuard(..), Proper, QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
 import Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, break, flattenMax, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingBlockComment, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingBlockComment, trailingLineComment)
 import Tidy.Doc (FormatDoc, toDoc) as Exports
+import Tidy.Doc as Doc
 import Tidy.Hang (HangingDoc, HangingOp(..), hang, hangApp, hangBreak, hangOps, hangWithIndent)
 import Tidy.Hang as Hang
 import Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), PrecedenceMap, QualifiedOperator(..), toOperatorTree)
@@ -53,11 +57,18 @@ data ImportWrapOption
 
 derive instance eqImportWrapOption :: Eq ImportWrapOption
 
+data ImportSortOption
+  = ImportSortSource
+  | ImportSortIde
+
+derive instance eqImportSortOpion :: Eq ImportSortOption
+
 type FormatOptions e a =
   { formatError :: e -> FormatDoc a
   , unicode :: UnicodeOption
   , typeArrowPlacement :: TypeArrowOption
   , operators :: PrecedenceMap
+  , importSort :: ImportSortOption
   , importWrap :: ImportWrapOption
   }
 
@@ -67,6 +78,7 @@ defaultFormatOptions =
   , unicode: UnicodeSource
   , typeArrowPlacement: TypeArrowFirst
   , operators: Map.empty
+  , importSort: ImportSortSource
   , importWrap: ImportWrapSource
   }
 
@@ -203,8 +215,55 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
     , foldr (formatComment leadingLineComment leadingBlockComment) mempty body.trailingComments
     ]
   where
+  formatImports k =
+    joinWithMap break (k <<< formatImportDecl conf)
+
   imports =
-    joinWithMap break (formatImportDecl conf) header.imports
+    case conf.importSort of
+      ImportSortSource ->
+        formatImports identity header.imports
+      ImportSortIde -> do
+        let { init, rest } = Array.span importOpen sorted
+        formatImports Doc.flatten init
+          <> forceMinSourceBreaks 2 (formatImports Doc.flatten rest)
+        where
+        sorted =
+          Array.sortBy
+            ( comparing (Down <<< importOpen)
+                <> comparing importModuleName
+                <> comparing importQualified
+            )
+            header.imports
+
+        importOpen (ImportDecl a) = case a.qualified, a.names of
+          Nothing, Nothing ->
+            true
+          Nothing, Just (Tuple (Just _) _) ->
+            true
+          _, _ ->
+            false
+
+        importModuleName (ImportDecl { module: Name { name } }) =
+          name
+
+        importQualified (ImportDecl a) = case a.qualified of
+          Nothing ->
+            ImportExplicit Nothing
+          Just (Tuple _ (Name { name })) ->
+            case a.names of
+              Just (Tuple Nothing _) ->
+                ImportExplicit (Just name)
+              Just (Tuple (Just _) _) ->
+                ImportHiding name
+              _ -> ImportAll name
+
+data ImportModuleComparison
+  = ImportExplicit (Maybe ModuleName)
+  | ImportAll ModuleName
+  | ImportHiding ModuleName
+
+derive instance eqImportModuleComparison :: Eq ImportModuleComparison
+derive instance ordImportModuleComparison :: Ord ImportModuleComparison
 
 formatExport :: forall e a. Format (Export e) e a
 formatExport conf = case _ of
@@ -240,11 +299,11 @@ formatImportDecl conf (ImportDecl imp) =
     Just (Tuple (Just hiding) nameList) ->
       formatName conf imp."module"
         `space` anchor (formatToken conf hiding)
-        `flexSpaceBreak` anchor (formatParenListNonEmpty NotGrouped formatImport conf nameList)
+        `flexSpaceBreak` anchor (formatParenListNonEmpty NotGrouped formatImport conf (sortImports nameList))
         `space` anchor (foldMap formatImportQualified imp.qualified)
     Just (Tuple Nothing nameList) ->
       formatName conf imp."module"
-        `flexSpaceBreak` anchor (formatParenListNonEmpty NotGrouped formatImport conf nameList)
+        `flexSpaceBreak` anchor (formatParenListNonEmpty NotGrouped formatImport conf (sortImports nameList))
         `space` anchor (foldMap formatImportQualified imp.qualified)
     Nothing ->
       formatName conf imp."module"
@@ -252,6 +311,64 @@ formatImportDecl conf (ImportDecl imp) =
 
   formatImportQualified (Tuple as qualName) =
     formatToken conf as `space` anchor (formatName conf qualName)
+
+  sortImports imports@(Wrapped { open, value: Separated { head, tail }, close }) = case conf.importSort of
+    ImportSortSource ->
+      imports
+    ImportSortIde ->
+      Wrapped
+        { open
+        , value: Separated
+            { head: sorted.head
+            , tail: Array.zip commas sorted.tail
+            }
+        , close
+        }
+      where
+      Tuple commas tail' =
+        Array.unzip tail
+
+      sorted =
+        NonEmptyArray.cons' head tail'
+          # NonEmptyArray.sortBy (comparing toComparison)
+          # NonEmptyArray.uncons
+
+      toComparison = case _ of
+        ImportValue (Name { name }) ->
+          ImportValueCmp name
+        ImportOp (Name { name }) ->
+          ImportOpCmp name
+        ImportType (Name { name }) Nothing ->
+          ImportTypeCmp name
+        ImportType (Name { name }) (Just (DataEnumerated (Wrapped { value }))) ->
+          case value of
+            Nothing ->
+              ImportTypeEnumeratedCmp name []
+            Just (Separated ctors) ->
+              ImportTypeEnumeratedCmp name $ (_.name <<< un Name) <$> Array.cons ctors.head (map snd ctors.tail)
+        ImportType (Name { name }) (Just (DataAll _)) ->
+          ImportTypeAllCmp name
+        ImportTypeOp _ (Name { name }) ->
+          ImportTypeOpCmp name
+        ImportClass _ (Name { name }) ->
+          ImportClassCmp name
+        ImportKind _ (Name { name }) ->
+          ImportTypeCmp name
+        ImportError _ ->
+          ImportErrorCmp
+
+data ImportComparison
+  = ImportClassCmp Proper
+  | ImportTypeOpCmp Operator
+  | ImportTypeAllCmp Proper
+  | ImportTypeCmp Proper
+  | ImportTypeEnumeratedCmp Proper (Array Proper)
+  | ImportValueCmp Ident
+  | ImportOpCmp Operator
+  | ImportErrorCmp
+
+derive instance eqImportComparison :: Eq ImportComparison
+derive instance ordImportComparison :: Ord ImportComparison
 
 formatImport :: forall e a. Format (Import e) e a
 formatImport conf = case _ of

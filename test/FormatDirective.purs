@@ -112,6 +112,7 @@ parseDirectivesFromModule (Module { header: ModuleHeader header, body }) =
         , operators: default.operators
         , unicode: opts.unicode
         , typeArrowPlacement: opts.typeArrowPlacement
+        , importSort: opts.importSort
         , importWrap: opts.importWrap
         }
     }

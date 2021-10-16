@@ -30,7 +30,8 @@ import Tidy.Operators (parseOperatorTable)
 import Tidy.Precedence (PrecedenceMap, remapOperators)
 
 type WorkerConfig =
-  { importWrap :: String
+  { importSort :: String
+  , importWrap :: String
   , indent :: Int
   , operatorsFile :: String
   , ribbon :: Number
@@ -41,7 +42,8 @@ type WorkerConfig =
 
 toWorkerConfig :: FormatOptions -> WorkerConfig
 toWorkerConfig options =
-  { importWrap: FormatOptions.importWrapToString options.importWrap
+  { importSort: FormatOptions.importSortToString options.importSort
+  , importWrap: FormatOptions.importWrapToString options.importWrap
   , indent: options.indent
   , operatorsFile: fromMaybe ".tidyoperators.default" options.operatorsFile
   , ribbon: options.ribbon
@@ -105,7 +107,10 @@ formatInPlaceCommand shouldCheck operators { filePath, config } = do
   let
     formatOptions :: FormatOptions
     formatOptions =
-      { importWrap:
+      { importSort:
+          fromRight' (\_ -> unsafeCrashWith "Unknown importSort value") do
+            FormatOptions.importSortFromString config.importSort
+      , importWrap:
           fromRight' (\_ -> unsafeCrashWith "Unknown importWrap value") do
             FormatOptions.importWrapFromString config.importWrap
       , indent: config.indent

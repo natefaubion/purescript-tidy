@@ -13,10 +13,11 @@ import Data.Argonaut.Encode (assoc, encodeJson, extend)
 import Data.Either (Either)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Traversable (traverse)
-import Tidy (ImportWrapOption(..), TypeArrowOption(..), UnicodeOption(..))
+import Tidy (ImportSortOption(..), ImportWrapOption(..), TypeArrowOption(..), UnicodeOption(..))
 
 type FormatOptions =
-  { importWrap :: ImportWrapOption
+  { importSort :: ImportSortOption
+  , importWrap :: ImportWrapOption
   , indent :: Int
   , operatorsFile :: Maybe String
   , ribbon :: Number
@@ -27,7 +28,8 @@ type FormatOptions =
 
 defaults :: FormatOptions
 defaults =
-  { importWrap: ImportWrapSource
+  { importSort: ImportSortSource
+  , importWrap: ImportWrapSource
   , indent: 2
   , operatorsFile: Nothing
   , ribbon: 1.0
@@ -39,7 +41,17 @@ defaults =
 formatOptions :: ArgParser FormatOptions
 formatOptions =
   Arg.fromRecord
-    { importWrap:
+    { importSort:
+        Arg.choose "import sort"
+          [ Arg.flag [ "--import-sort-source", "-iss" ]
+              "Imports are not automatically sorted and keep the same order as in the source.\nDefault."
+              $> ImportSortSource
+          , Arg.flag [ "--import-sort-ide", "-isi" ]
+              "Imports are automatically sorted like purs-ide."
+              $> ImportSortIde
+          ]
+          # Arg.default defaults.importSort
+    , importWrap:
         Arg.choose "import wrap"
           [ Arg.flag [ "--import-wrap-source", "-iws" ]
               "Imports are wrapped only when breaks are in the source.\nDefault. Works well with IDE imports."
@@ -100,6 +112,7 @@ unicodeOption =
 fromJson :: Json -> Either JsonDecodeError FormatOptions
 fromJson json = do
   obj <- decodeJson json
+  importSort <- traverse importSortFromString =<< obj .:? "importSort"
   importWrap <- traverse importWrapFromString =<< obj .:? "importWrap"
   indent <- obj .:? "indent"
   operatorsFile <- obj .:? "operatorsFile"
@@ -108,7 +121,8 @@ fromJson json = do
   unicode <- traverse unicodeFromString =<< obj .:? "unicode"
   width <- obj .:? "width"
   pure
-    { importWrap: fromMaybe defaults.importWrap importWrap
+    { importSort: fromMaybe defaults.importSort importSort
+    , importWrap: fromMaybe defaults.importWrap importWrap
     , indent: fromMaybe defaults.indent indent
     , operatorsFile: operatorsFile <|> defaults.operatorsFile
     , ribbon: fromMaybe defaults.ribbon ribbon
@@ -162,3 +176,14 @@ importWrapToString :: ImportWrapOption -> String
 importWrapToString = case _ of
   ImportWrapSource -> "source"
   ImportWrapAuto -> "auto"
+
+importSortFromString :: String -> Either JsonDecodeError ImportSortOption
+importSortFromString = case _ of
+  "source" -> pure ImportSortSource
+  "ide" -> pure ImportSortIde
+  other -> throwError $ UnexpectedValue (Json.fromString other)
+
+importSortToString :: ImportSortOption -> String
+importSortToString = case _ of
+  ImportSortSource -> "source"
+  ImportSortIde -> "ide"
