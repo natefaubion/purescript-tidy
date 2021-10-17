@@ -17,5 +17,6 @@ import Data.Array as Array
 import Data.Array as A
 
 import Example (Test, type (+), Test(BBB, AAA), Test(..), Test(), test, class Test)
+import Example (class Test) as Exports
 
 import Prelude

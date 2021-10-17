@@ -27,7 +27,6 @@
   , "node-workerbees"
   , "numbers"
   , "ordered-collections"
-  , "orders"
   , "parallel"
   , "partial"
   , "prelude"
