@@ -66,7 +66,7 @@ main = do
     contents =
       Array.intercalate "\n" (header <> lines <> footer)
 
-  writeTextFile UTF8 (Path.concat [ cwdPath, "src", "PureScript", "CST", "Tidy", "Operators", "Defaults.purs" ]) contents
+  writeTextFile UTF8 (Path.concat [ cwdPath, "src", "Tidy", "Operators", "Defaults.purs" ]) contents
 
 defaultSpagoDhall :: String
 defaultSpagoDhall =
