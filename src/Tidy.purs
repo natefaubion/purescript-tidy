@@ -24,11 +24,10 @@ import Data.Array.NonEmpty as NonEmptyArray
 import Data.Foldable (foldMap, foldl, foldr)
 import Data.List.NonEmpty as NonEmptyList
 import Data.Map as Map
-import Data.Maybe (Maybe(..), maybe)
+import Data.Maybe (Maybe(..), isJust, maybe)
 import Data.Monoid (power)
 import Data.Monoid as Monoid
 import Data.Newtype (un)
-import Data.Ord.Down (Down(..))
 import Data.String.CodeUnits as SCU
 import Data.Tuple (Tuple(..), fst, snd)
 import Dodo as Dodo
@@ -43,7 +42,7 @@ import Tidy.Hang as Hang
 import Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), PrecedenceMap, QualifiedOperator(..), toOperatorTree)
 import Tidy.Token (UnicodeOption(..)) as Exports
 import Tidy.Token (UnicodeOption(..), printToken)
-import Tidy.Util (splitLines, splitStringEscapeLines)
+import Tidy.Util (nameOf, splitLines, splitStringEscapeLines)
 
 data TypeArrowOption
   = TypeArrowFirst
@@ -223,19 +222,28 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
       ImportSortSource ->
         formatImports identity header.imports
       ImportSortIde -> do
-        let { init, rest } = Array.span importOpen sorted
-        formatImports Doc.flatten init
-          <> forceMinSourceBreaks 2 (formatImports Doc.flatten rest)
+        let { yes, no } = Array.partition isOpenImport sorted
+        formatImports Doc.flatten yes
+          <> forceMinSourceBreaks 2 (formatImports Doc.flatten no)
         where
         sorted =
-          Array.sortBy
-            ( comparing (Down <<< importOpen)
-                <> comparing importModuleName
-                <> comparing importQualified
-            )
-            header.imports
+          header.imports
+            # map toComparison
+            # Array.sortWith fst
+            # map snd
 
-        importOpen (ImportDecl a) = case a.qualified, a.names of
+        toComparison (ImportDecl decl) = do
+          let modName = nameOf decl.module
+          let qualName = nameOf <<< snd <$> decl.qualified
+          case decl.names of
+            Just (Tuple hiding names) -> do
+              let Tuple cmps names' = sortImportsIde names
+              let order = if isJust hiding then 3 else 1
+              Tuple (ImportModuleCmp modName order cmps qualName) (ImportDecl decl { names = Just (Tuple hiding names') })
+            Nothing ->
+              Tuple (ImportModuleCmp modName 2 [] qualName) (ImportDecl decl)
+
+        isOpenImport (ImportDecl a) = case a.qualified, a.names of
           Nothing, Nothing ->
             true
           Nothing, Just (Tuple (Just _) _) ->
@@ -243,24 +251,8 @@ formatModule conf (Module { header: ModuleHeader header, body: ModuleBody body }
           _, _ ->
             false
 
-        importModuleName (ImportDecl { module: Name { name } }) =
-          name
-
-        importQualified (ImportDecl a) = case a.qualified of
-          Nothing ->
-            ImportExplicit Nothing
-          Just (Tuple _ (Name { name })) ->
-            case a.names of
-              Just (Tuple Nothing _) ->
-                ImportExplicit (Just name)
-              Just (Tuple (Just _) _) ->
-                ImportHiding name
-              _ -> ImportAll name
-
-data ImportModuleComparison
-  = ImportExplicit (Maybe ModuleName)
-  | ImportAll ModuleName
-  | ImportHiding ModuleName
+data ImportModuleComparison =
+  ImportModuleCmp ModuleName Int (Array ImportComparison) (Maybe ModuleName)
 
 derive instance eqImportModuleComparison :: Eq ImportModuleComparison
 derive instance ordImportModuleComparison :: Ord ImportModuleComparison
@@ -299,11 +291,11 @@ formatImportDecl conf (ImportDecl imp) =
     Just (Tuple (Just hiding) nameList) ->
       formatName conf imp."module"
         `space` anchor (formatToken conf hiding)
-        `flexSpaceBreak` anchor (formatParenListNonEmpty NotGrouped formatImport conf (sortImports nameList))
+        `flexSpaceBreak` anchor (formatParenListNonEmpty NotGrouped formatImport conf nameList)
         `space` anchor (foldMap formatImportQualified imp.qualified)
     Just (Tuple Nothing nameList) ->
       formatName conf imp."module"
-        `flexSpaceBreak` anchor (formatParenListNonEmpty NotGrouped formatImport conf (sortImports nameList))
+        `flexSpaceBreak` anchor (formatParenListNonEmpty NotGrouped formatImport conf nameList)
         `space` anchor (foldMap formatImportQualified imp.qualified)
     Nothing ->
       formatName conf imp."module"
@@ -312,57 +304,53 @@ formatImportDecl conf (ImportDecl imp) =
   formatImportQualified (Tuple as qualName) =
     formatToken conf as `space` anchor (formatName conf qualName)
 
-  sortImports imports@(Wrapped { open, value: Separated { head, tail }, close }) = case conf.importSort of
-    ImportSortSource ->
-      imports
-    ImportSortIde ->
-      Wrapped
-        { open
-        , value: Separated
-            { head: sorted.head
-            , tail: Array.zip commas sorted.tail
-            }
-        , close
+sortImportsIde :: forall e. DelimitedNonEmpty (Import e) -> Tuple (Array ImportComparison) (DelimitedNonEmpty (Import e))
+sortImportsIde (Wrapped { open, value: Separated { head, tail }, close }) = do
+  let
+    Tuple commas tail' = Array.unzip tail
+    Tuple cmps imports =
+      NonEmptyArray.cons' head tail'
+        # map (Tuple =<< toComparison)
+        # NonEmptyArray.sortWith fst
+        # NonEmptyArray.unzip
+
+  Tuple (NonEmptyArray.toArray cmps) $ Wrapped
+    { open
+    , value: Separated
+        { head: NonEmptyArray.head imports
+        , tail: Array.zip commas (NonEmptyArray.tail imports)
         }
-      where
-      Tuple commas tail' =
-        Array.unzip tail
-
-      sorted =
-        NonEmptyArray.cons' head tail'
-          # NonEmptyArray.sortBy (comparing toComparison)
-          # NonEmptyArray.uncons
-
-      toComparison = case _ of
-        ImportValue (Name { name }) ->
-          ImportValueCmp name
-        ImportOp (Name { name }) ->
-          ImportOpCmp name
-        ImportType (Name { name }) Nothing ->
-          ImportTypeCmp name
-        ImportType (Name { name }) (Just (DataEnumerated (Wrapped { value }))) ->
-          case value of
-            Nothing ->
-              ImportTypeEnumeratedCmp name []
-            Just (Separated ctors) ->
-              ImportTypeEnumeratedCmp name $ (_.name <<< un Name) <$> Array.cons ctors.head (map snd ctors.tail)
-        ImportType (Name { name }) (Just (DataAll _)) ->
-          ImportTypeAllCmp name
-        ImportTypeOp _ (Name { name }) ->
-          ImportTypeOpCmp name
-        ImportClass _ (Name { name }) ->
-          ImportClassCmp name
-        ImportKind _ (Name { name }) ->
-          ImportTypeCmp name
-        ImportError _ ->
-          ImportErrorCmp
+    , close
+    }
+  where
+  toComparison = case _ of
+    ImportValue (Name { name }) ->
+      ImportValueCmp name
+    ImportOp (Name { name }) ->
+      ImportOpCmp name
+    ImportType (Name { name }) Nothing ->
+      ImportTypeCmp name true []
+    ImportType (Name { name }) (Just (DataEnumerated (Wrapped { value }))) ->
+      case value of
+        Nothing ->
+          ImportTypeCmp name true []
+        Just (Separated ctors) ->
+          ImportTypeCmp name true $ (_.name <<< un Name) <$> Array.cons ctors.head (map snd ctors.tail)
+    ImportType (Name { name }) (Just (DataAll _)) ->
+      ImportTypeCmp name false []
+    ImportTypeOp _ (Name { name }) ->
+      ImportTypeOpCmp name
+    ImportClass _ (Name { name }) ->
+      ImportClassCmp name
+    ImportKind _ (Name { name }) ->
+      ImportTypeCmp name true []
+    ImportError _ ->
+      ImportErrorCmp
 
 data ImportComparison
   = ImportClassCmp Proper
   | ImportTypeOpCmp Operator
-  | ImportTypeAllCmp Proper
-  | ImportTypeCmp Proper
-  | ImportTypeEnumeratedCmp Proper (Array Proper)
+  | ImportTypeCmp Proper Boolean (Array Proper)
   | ImportValueCmp Ident
   | ImportOpCmp Operator
   | ImportErrorCmp

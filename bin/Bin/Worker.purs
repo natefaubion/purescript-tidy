@@ -83,7 +83,8 @@ formatCommand args operators contents = do
     ParseSucceeded ok -> do
       let
         opts = defaultFormatOptions
-          { importWrap = args.importWrap
+          { importSort = args.importSort
+          , importWrap = args.importWrap
           , operators = remapOperators operators ok
           , typeArrowPlacement = args.typeArrowPlacement
           , unicode = args.unicode
@@ -93,7 +94,8 @@ formatCommand args operators contents = do
       let
         opts =
           defaultFormatOptions
-            { importWrap = args.importWrap
+            { importSort = args.importSort
+            , importWrap = args.importWrap
             , operators = remapOperators operators ok
             , typeArrowPlacement = args.typeArrowPlacement
             , unicode = args.unicode
