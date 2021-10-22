@@ -94,7 +94,7 @@ To enable automatic formatting of the buffer on save, enable `purescript-fmt-on-
 Add to your other fixers `.vimrc` or `$XDG_CONFIG_HOME/neovim/init.vim`
 
 ```viml
-let b:ale_fixers = { 'purescript': [ 'purs-tidy' ] }
+let b:ale_fixers = { 'purescript': [ 'purstidy' ] }
 " suggested to fix on save
 let g:ale_fix_on_save = 1
 ```
