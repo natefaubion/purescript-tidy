@@ -382,7 +382,7 @@ formatDecl conf = case _ of
       declareHanging
         (formatDataHead conf head)
         space
-        (formatToken conf equals)
+        (anchor (formatToken conf equals))
         (formatHangingDataCtor conf ctors.head)
     else
       formatDataHead conf head `flexSpaceBreak` indent do
@@ -400,14 +400,14 @@ formatDecl conf = case _ of
     declareHanging
       (formatDataHead conf head)
       space
-      (formatToken conf equals)
+      (anchor (formatToken conf equals))
       (formatHangingType conf ty)
 
   DeclNewtype head equals name ty ->
     declareHanging
       (formatDataHead conf head)
       space
-      (formatToken conf equals)
+      (anchor (formatToken conf equals))
       (formatHangingDataCtor conf (DataCtor { name, fields: [ ty ] }))
 
   DeclRole kw1 kw2 name rls ->
