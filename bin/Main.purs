@@ -366,12 +366,11 @@ resolveRcForDir root = go List.Nil
 
 readStdin :: Aff String
 readStdin = makeAff \k -> do
-  contents <- Ref.new ""
+  contents <- Ref.new []
   Stream.onData Process.stdin \buff -> do
-    chunk <- Buffer.toString UTF8 buff
-    void $ Ref.modify (_ <> chunk) contents
+    void $ Ref.modify (_ `Array.snoc` buff) contents
   Stream.onEnd Process.stdin do
-    k <<< Right =<< Ref.read contents
+    k <<< Right =<< Buffer.toString UTF8 =<< Buffer.concat =<< Ref.read contents
   pure mempty
 
 generateOperatorsCommand :: Array String -> Aff Unit
