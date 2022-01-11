@@ -104,7 +104,7 @@ let g:ale_fix_on_save = 1
 Add to your `.vimrc` or `$XDG_CONFIG_HOME/neovim/init.vim`
 
 ```viml
-let g:neoformat_enabled_purescript = ['purs-tidy']
+let g:neoformat_enabled_purescript = ['purstidy']
 ```
 
 ### VS Code
