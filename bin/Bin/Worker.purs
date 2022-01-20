@@ -5,6 +5,7 @@ import Prelude
 import Bin.FormatOptions (FormatOptions)
 import Bin.FormatOptions as FormatOptions
 import Bin.Timing (hrtime, hrtimeDiff, toMilliseconds)
+import Data.Array.NonEmpty as NonEmptyArray
 import Data.Either (Either(..), either, fromRight')
 import Data.Lazy (Lazy)
 import Data.Lazy as Lazy
@@ -90,17 +91,8 @@ formatCommand args operators contents = do
           , unicode = args.unicode
           }
       Right $ print $ toDoc $ formatModule opts ok
-    ParseSucceededWithErrors ok _ -> do
-      let
-        opts =
-          defaultFormatOptions
-            { importSort = args.importSort
-            , importWrap = args.importWrap
-            , operators = remapOperators operators ok
-            , typeArrowPlacement = args.typeArrowPlacement
-            , unicode = args.unicode
-            }
-      Right $ print $ toDoc $ formatModule opts ok
+    ParseSucceededWithErrors _ errs -> do
+      Left (NonEmptyArray.head errs).error
     ParseFailed err ->
       Left err.error
 
