@@ -34,7 +34,7 @@ import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
 import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), OneOrDelimited(..), Operator, PatternGuard(..), Proper, QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
-import Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, break, flattenMax, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingBlockComment, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingBlockComment, trailingLineComment)
+import Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, break, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingBlockComment, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingBlockComment, trailingLineComment)
 import Tidy.Doc (FormatDoc, toDoc) as Exports
 import Tidy.Doc as Doc
 import Tidy.Hang (HangingDoc, HangingOp(..), hang, hangApp, hangBreak, hangOps, hangWithIndent)
