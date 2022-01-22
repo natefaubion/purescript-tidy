@@ -11,14 +11,15 @@ foreign import test
        { bar :: Int
        }
 
-foreign import test :: Foo
-  { bar :: Int
-  }
+foreign import test
+  :: Foo
+       { bar :: Int
+       }
 
-foreign import test ::
-  Foo
-    { bar :: Int
-    }
+foreign import test
+  :: Foo
+       { bar :: Int
+       }
 
 foreign import test
   :: Foo
@@ -35,6 +36,11 @@ foreign import test
   -> Foo
        { bar :: Int
        }
+
+foreign import test
+  :: { foo :: Int
+     , bar :: Int
+     }
 
 -- @format --arrow-last
 module ForeignImportSignatures where
@@ -75,3 +81,8 @@ foreign import test ::
   Foo
     { bar :: Int
     }
+
+foreign import test ::
+  { foo :: Int
+  , bar :: Int
+  }

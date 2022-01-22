@@ -42,7 +42,7 @@ import Tidy.Hang as Hang
 import Tidy.Precedence (OperatorNamespace(..), OperatorTree(..), PrecedenceMap, QualifiedOperator(..), toOperatorTree)
 import Tidy.Token (UnicodeOption(..)) as Exports
 import Tidy.Token (UnicodeOption(..), printToken)
-import Tidy.Util (nameOf, splitLines, splitStringEscapeLines)
+import Tidy.Util (nameOf, overLabel, splitLines, splitStringEscapeLines)
 
 data TypeArrowOption
   = TypeArrowFirst
@@ -455,25 +455,27 @@ formatDecl conf = case _ of
 
   DeclForeign kw1 kw2 frn ->
     case frn of
-      ForeignValue (Labeled lbl) ->
-        formatSignature conf $ Labeled lbl
-          { label =
+      ForeignValue lbl ->
+        formatSignature conf $ overLabel
+          ( \label ->
               flatten
                 [ formatToken conf kw1
                 , formatToken conf kw2
-                , formatName conf lbl.label
+                , formatName conf label
                 ]
-          }
-      ForeignData kw3 (Labeled lbl) ->
-        formatSignature conf $ Labeled lbl
-          { label =
+          )
+          lbl
+      ForeignData kw3 lbl ->
+        formatSignature conf $ overLabel
+          ( \label ->
               flatten
                 [ formatToken conf kw1
                 , formatToken conf kw2
                 , formatToken conf kw3
-                , formatName conf lbl.label
+                , formatName conf label
                 ]
-          }
+          )
+          lbl
       ForeignKind kw3 name ->
         flatten
           [ formatToken conf kw1
@@ -506,7 +508,7 @@ formatDecl conf = case _ of
       `space` anchor (formatInstanceHead conf (Tuple hd Nothing))
 
   DeclSignature sig ->
-    formatSignature conf $ overLabel (formatName conf) sig
+    formatSignature conf $ overLabel (flatten <<< pure <<< formatName conf) sig
 
   DeclValue binding ->
     formatValueBinding conf binding
@@ -640,10 +642,9 @@ formatSignature conf (Labeled { label, separator, value }) =
   case conf.typeArrowPlacement of
     TypeArrowFirst ->
       if Array.null polytype.init then
-        Hang.toFormatDoc $ Hang.hangWithIndent indent (Hang.hangBreak label)
-          [ Hang.hangWithIndent (align width <<< indent) (Hang.hangBreak (flattenMax 1 (formatToken conf separator)))
-              [ formattedPolytype ]
-          ]
+        label `flexSpaceBreak` indent do
+          anchor (formatToken conf separator)
+            `space` anchor (align width (Hang.toFormatDoc formattedPolytype))
       else
         label `flexSpaceBreak` indent do
           anchor (formatToken conf separator)
@@ -1268,9 +1269,6 @@ toQualifiedOperatorTree
 toQualifiedOperatorTree precMap opNs =
   toOperatorTree precMap \(QualifiedName qn) ->
     QualifiedOperator qn."module" opNs qn.name
-
-overLabel :: forall a b c. (a -> b) -> Labeled a c -> Labeled b c
-overLabel k (Labeled lbl) = Labeled lbl { label = k lbl.label }
 
 data DeclGroup
   = DeclGroupValueSignature Ident

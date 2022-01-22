@@ -37,3 +37,8 @@ foreign import test
   -> Foo
   { bar :: Int
   }
+
+foreign import test
+  :: { foo :: Int
+     , bar :: Int
+     }
