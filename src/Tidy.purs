@@ -642,10 +642,9 @@ formatSignature conf (Labeled { label, separator, value }) =
   case conf.typeArrowPlacement of
     TypeArrowFirst ->
       if Array.null polytype.init then
-        Hang.toFormatDoc $ Hang.hangWithIndent indent (Hang.hangBreak label)
-          [ Hang.hangWithIndent (align width <<< indent) (Hang.hangBreak (flattenMax 1 (formatToken conf separator)))
-              [ formattedPolytype ]
-          ]
+        label `flexSpaceBreak` indent do
+          anchor (formatToken conf separator)
+            `space` anchor (align width (Hang.toFormatDoc formattedPolytype))
       else
         label `flexSpaceBreak` indent do
           anchor (formatToken conf separator)
