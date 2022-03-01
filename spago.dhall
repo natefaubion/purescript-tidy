@@ -7,6 +7,7 @@
   , "foldable-traversable"
   , "lists"
   , "maybe"
+  , "newtype"
   , "ordered-collections"
   , "partial"
   , "prelude"
