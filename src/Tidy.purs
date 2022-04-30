@@ -269,8 +269,6 @@ formatExport conf = case _ of
     formatToken conf t `space` anchor (formatName conf n)
   ExportClass t n ->
     formatToken conf t `space` anchor (formatName conf n)
-  ExportKind t n ->
-    formatToken conf t `space` anchor (formatName conf n)
   ExportModule t n ->
     formatToken conf t `space` anchor (formatName conf n)
   ExportError e ->
@@ -342,8 +340,6 @@ sortImportsIde (Wrapped { open, value: Separated { head, tail }, close }) = do
       ImportTypeOpCmp name
     ImportClass _ (Name { name }) ->
       ImportClassCmp name
-    ImportKind _ (Name { name }) ->
-      ImportTypeCmp name true []
     ImportError _ ->
       ImportErrorCmp
 
@@ -369,8 +365,6 @@ formatImport conf = case _ of
   ImportTypeOp t n ->
     formatToken conf t `space` anchor (formatName conf n)
   ImportClass t n ->
-    formatToken conf t `space` anchor (formatName conf n)
-  ImportKind t n ->
     formatToken conf t `space` anchor (formatName conf n)
   ImportError e ->
     conf.formatError e
@@ -688,6 +682,8 @@ formatHangingMonotype conf = case _ of
     hangBreak $ formatName conf n
   TypeString t _ ->
     hangBreak $ formatToken conf t
+  TypeInt t _ ->
+    hangBreak $ formatToken conf t
   TypeArrowName t ->
     hangBreak $ formatToken conf t
   TypeOpName n ->
@@ -701,8 +697,6 @@ formatHangingMonotype conf = case _ of
       `hangApp` map (formatHangingType conf) tail
   TypeParens ty ->
     hangBreak $ formatParensBlock formatType conf ty
-  TypeUnaryRow t ty ->
-    hangBreak $ formatToken conf t `space` formatType conf ty
   TypeKinded ty1 t ty2 ->
     hangBreak $ formatType conf ty1 `space` indent do
       anchor (formatToken conf t)

@@ -30,7 +30,6 @@
   , "parallel"
   , "partial"
   , "prelude"
-  , "psci-support"
   , "purescript-language-cst-parser"
   , "refs"
   , "strings"

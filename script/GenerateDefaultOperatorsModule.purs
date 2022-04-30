@@ -30,7 +30,8 @@ main = do
   let genCmd = Path.concat [ cwdPath, "bin", "index.js" ] <> " generate-operators '.spago/*/*/src/**/*.purs'"
 
   writeTextFile UTF8 (Path.concat [ tmpPath, "spago.dhall" ]) defaultSpagoDhall
-  _ <- ChildProcess.execSync "spago install" opts
+  writeTextFile UTF8 (Path.concat [ tmpPath, "package.json" ]) defaultPackageJson
+  _ <- ChildProcess.execSync "npm install" opts
   output <- Buffer.toString UTF8 =<< catchException
     ( \err -> do
         stdout <- Buffer.toString UTF8 ((unsafeCoerce err).stdout :: Buffer)
@@ -67,6 +68,21 @@ main = do
       Array.intercalate "\n" (header <> lines <> footer)
 
   writeTextFile UTF8 (Path.concat [ cwdPath, "src", "Tidy", "Operators", "Defaults.purs" ]) contents
+
+defaultPackageJson :: String
+defaultPackageJson =
+  """
+  {
+    "private": true,
+    "dependencies": {
+      "purescript": "^0.15.0",
+      "spago": "^0.20.8"
+    },
+    "scripts": {
+      "postinstall": "spago install"
+    }
+  }
+  """
 
 defaultSpagoDhall :: String
 defaultSpagoDhall =
@@ -128,7 +144,6 @@ defaultSpagoDhall =
     , "lcg"
     , "lists"
     , "machines"
-    , "math"
     , "matryoshka"
     , "maybe"
     , "media-types"
@@ -177,7 +192,7 @@ defaultSpagoDhall =
     , "uri"
     , "validation"
     ]
-  , packages = https://github.com/purescript/package-sets/releases/download/psc-0.14.3-20210811/packages.dhall sha256:a2de7ef2f2e753733eddfa90573a82da0c7c61d46fa87d015b7f15ef8a6e97d5
+  , packages = https://github.com/purescript/package-sets/releases/download/psc-0.15.0-20220429/packages.dhall
   , sources = [] : List Text
   }
 """
