@@ -12,6 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: purescript-contrib/setup-purescript@main
+        with:
+          purescript: "0.14.7"
       - uses: actions/cache@v2
         # This cache uses the .dhall files to know when it should reinstall
         # and rebuild packages. It caches both the installed packages from

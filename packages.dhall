@@ -23,7 +23,7 @@ let additions =
           ]
         , repo =
             "https://github.com/natefaubion/purescript-language-cst-parser.git"
-        , version = "v0.10.1"
+        , version = "v0.11.0"
         }
       , dodo-printer =
         { dependencies =
