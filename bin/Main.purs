@@ -176,13 +176,12 @@ main = launchAff_ do
 
         GenerateRc cliOptions -> do
           rcStats <- Aff.try $ FS.stat rcFileName
-          case rcStats of
-            Left _ -> do
-              let contents = Json.stringifyWithIndent 2 $ FormatOptions.toJson cliOptions
-              FS.writeTextFile UTF8 rcFileName $ contents <> "\n"
-            Right _ -> do
-              Console.error $ rcFileName <> " already exists."
-              liftEffect $ Process.exit 1
+          if isLeft rcStats then do
+            let contents = Json.stringifyWithIndent 2 $ FormatOptions.toJson cliOptions
+            FS.writeTextFile UTF8 rcFileName $ contents <> "\n"
+          else do
+            Console.error $ rcFileName <> " already exists."
+            liftEffect $ Process.exit 1
 
         FormatInPlace mode cliOptions configOption numThreads printTiming globs -> do
           currentDir <- liftEffect Process.cwd
