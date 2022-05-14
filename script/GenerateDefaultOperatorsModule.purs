@@ -31,7 +31,7 @@ main = do
 
   writeTextFile UTF8 (Path.concat [ tmpPath, "spago.dhall" ]) defaultSpagoDhall
   writeTextFile UTF8 (Path.concat [ tmpPath, "package.json" ]) defaultPackageJson
-  -- _ <- ChildProcess.execSync "npm install" opts
+  _ <- ChildProcess.execSync "npm install" opts
   output <- Buffer.toString UTF8 =<< catchException
     ( \err -> do
         stdout <- Buffer.toString UTF8 ((unsafeCoerce err).stdout :: Buffer)
