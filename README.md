@@ -121,14 +121,15 @@ The PureScript IDE plugin for VS Code supports `purs-tidy` as a built-in formatt
 
 ### Requirements
 
-* `purs`: 0.14
+* `purs`: 0.15
 * `spago`: 0.20
 * `node`: 14
+* `esbuild`: 0.14
 
 ### Running `bin`
 
 ```console
-$ spago -x ./bin/spago.dhall build
+$ npm run bundle
 $ ./bin/index.js --help
 ```
 
@@ -139,11 +140,11 @@ If you would like to use your local build of `purs-tidy` in your editor, use pat
 To accept snapshot tests:
 
 ```console
-$ spago -x ./test/spago.dhall test -a "--accept"
+$ npm run test -- -a "--accept"
 ```
 
 ### Generating the built-in operator table
 
 ```console
-$ spago -x ./script/spago.dhall run -m GenerateDefaultOperatorsModule
+$ npm run generate-default-operators
 ```

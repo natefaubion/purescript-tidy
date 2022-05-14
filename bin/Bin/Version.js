@@ -1,1 +1,3 @@
-exports.version = require("../../package.json").version;
+import { version } from "../../package.json";
+
+export { version };

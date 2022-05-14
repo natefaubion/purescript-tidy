@@ -2,7 +2,7 @@ module Test.Snapshot where
 
 import Prelude
 
-import Control.MonadZero (guard)
+import Control.Alternative (guard)
 import Data.Array (dropEnd, mapMaybe)
 import Data.Array as Array
 import Data.Array.NonEmpty as NEA

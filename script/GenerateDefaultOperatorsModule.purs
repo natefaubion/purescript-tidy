@@ -31,7 +31,7 @@ main = do
 
   writeTextFile UTF8 (Path.concat [ tmpPath, "spago.dhall" ]) defaultSpagoDhall
   writeTextFile UTF8 (Path.concat [ tmpPath, "package.json" ]) defaultPackageJson
-  _ <- ChildProcess.execSync "npm install" opts
+  -- _ <- ChildProcess.execSync "npm install" opts
   output <- Buffer.toString UTF8 =<< catchException
     ( \err -> do
         stdout <- Buffer.toString UTF8 ((unsafeCoerce err).stdout :: Buffer)
@@ -74,6 +74,7 @@ defaultPackageJson =
   """
   {
     "private": true,
+    "type": "module",
     "dependencies": {
       "purescript": "^0.15.0",
       "spago": "^0.20.8"
@@ -192,7 +193,7 @@ defaultSpagoDhall =
     , "uri"
     , "validation"
     ]
-  , packages = https://github.com/purescript/package-sets/releases/download/psc-0.15.0-20220429/packages.dhall
+  , packages = https://github.com/purescript/package-sets/releases/download/psc-0.15.0-20220513/packages.dhall
   , sources = [] : List Text
   }
 """

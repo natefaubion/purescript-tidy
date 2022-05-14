@@ -682,8 +682,8 @@ formatHangingMonotype conf = case _ of
     hangBreak $ formatName conf n
   TypeString t _ ->
     hangBreak $ formatToken conf t
-  TypeInt t _ ->
-    hangBreak $ formatToken conf t
+  TypeInt neg t _ ->
+    hangBreak $ foldMap (formatToken conf) neg <> formatToken conf t
   TypeArrowName t ->
     hangBreak $ formatToken conf t
   TypeOpName n ->
