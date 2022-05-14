@@ -15,7 +15,7 @@
   ],
   "scripts": {
     "build": "spago -x bin/spago.dhall build",
-    "bundle": "npm run bundle:main && npm run bundle:worker",
+    "bundle": "npm run build && npm run bundle:main && npm run bundle:worker",
     "bundle:main": "spago -x bin/spago.dhall bundle-module --platform node --to './bundle/Main/index.js' --no-build --quiet",
     "bundle:worker": "spago -x bin/spago.dhall bundle-app --platform node --to './bundle/Bin.Worker/index.js' --main Bin.Worker --no-build --quiet",
     "test": "spago -x test/spago.dhall test",
