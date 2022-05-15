@@ -1,3 +1,3 @@
-import { version } from "../../package.json";
+import packageJson from "../../package.json" assert { type: "json" };
 
-export { version };
+export const version = packageJson.version;

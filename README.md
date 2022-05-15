@@ -128,6 +128,15 @@ The PureScript IDE plugin for VS Code supports `purs-tidy` as a built-in formatt
 
 ### Running `bin`
 
+For local development pointing to the `output` directory:
+
+```console
+$ npm run build
+$ ./bin/index.dev.js --help
+```
+
+For a local production build pointing to the `bundle` directory:
+
 ```console
 $ npm run bundle
 $ ./bin/index.js --help

@@ -15,8 +15,8 @@ import Control.Plus ((<|>))
 import Data.Argonaut.Core as Json
 import Data.Argonaut.Decode (parseJson, printJsonDecodeError)
 import Data.Array as Array
-import Data.Either (Either(..))
-import Data.Foldable (fold, foldMap, foldl, for_)
+import Data.Either (Either(..), isLeft)
+import Data.Foldable (fold, foldMap, foldl, for_, oneOf)
 import Data.Lazy (Lazy)
 import Data.Lazy as Lazy
 import Data.List (List)
@@ -213,10 +213,15 @@ main = launchAff_ do
 
           results <-
             if Array.length filesWithOptions > numThreads * 2 then do
-              -- Worker location
+              -- Worker location for production bin
               let bundleLocation = Path.concat [ srcLocation, "bundle", "Bin.Worker", "index.js" ]
+              -- Worker location for local dev
+              let outputLocation = Path.concat [ srcLocation, "output", "Bin.Worker", "index.js" ]
               worker <-
-                FS.stat bundleLocation $> Worker.unsafeWorkerFromPath bundleLocation
+                oneOf
+                  [ FS.stat bundleLocation $> Worker.unsafeWorkerFromPath bundleLocation
+                  , FS.stat outputLocation $> Worker.unsafeWorkerFromPath outputLocation
+                  ]
                   <|> throwError (error "Worker not found")
               poolTraverse worker workerData numThreads filesWithOptions
             else
