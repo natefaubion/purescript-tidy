@@ -1,1 +1,1 @@
-exports.version = require("../../package.json").version;
+export const version = "v0.8.0";

@@ -1,4 +1,4 @@
-{ name = "purescript-tidy-cli"
+{ name = "tidy-cli"
 , dependencies =
   [ "aff"
   , "argonaut-codecs"
@@ -30,7 +30,7 @@
   , "parallel"
   , "partial"
   , "prelude"
-  , "purescript-language-cst-parser"
+  , "language-cst-parser"
   , "refs"
   , "strings"
   , "transformers"

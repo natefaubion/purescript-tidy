@@ -1,13 +1,13 @@
-const process = require("process");
+import process from "process";
 
-exports.hrtime = function() {
+export function hrtime() {
   var t = process.hrtime()
   return { seconds: t[0], nanos: t[1] };
-};
+}
 
-exports.hrtimeDiff = function(old) {
+export function hrtimeDiff(old) {
   return function() {
     var t = process.hrtime([old.seconds, old.nanos]);
     return { seconds: t[0], nanos: t[1] };
   };
-};
+}

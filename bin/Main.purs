@@ -15,7 +15,7 @@ import Control.Plus ((<|>))
 import Data.Argonaut.Core as Json
 import Data.Argonaut.Decode (parseJson, printJsonDecodeError)
 import Data.Array as Array
-import Data.Either (Either(..))
+import Data.Either (Either(..), isLeft)
 import Data.Foldable (fold, foldMap, foldl, for_, oneOf)
 import Data.Lazy (Lazy)
 import Data.Lazy as Lazy
@@ -35,6 +35,7 @@ import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
 import Effect.Aff (Aff, error, launchAff_, makeAff, throwError, try)
+import Effect.Aff as Aff
 import Effect.Class (liftEffect)
 import Effect.Class.Console as Console
 import Effect.Ref as Ref
@@ -174,13 +175,13 @@ main = launchAff_ do
           generateOperatorsCommand globs
 
         GenerateRc cliOptions -> do
-          rcExists <- FS.exists rcFileName
-          if rcExists then do
-            Console.error $ rcFileName <> " already exists."
-            liftEffect $ Process.exit 1
-          else do
+          rcStats <- Aff.try $ FS.stat rcFileName
+          if isLeft rcStats then do
             let contents = Json.stringifyWithIndent 2 $ FormatOptions.toJson cliOptions
             FS.writeTextFile UTF8 rcFileName $ contents <> "\n"
+          else do
+            Console.error $ rcFileName <> " already exists."
+            liftEffect $ Process.exit 1
 
         FormatInPlace mode cliOptions configOption numThreads printTiming globs -> do
           currentDir <- liftEffect Process.cwd
@@ -212,17 +213,14 @@ main = launchAff_ do
 
           results <-
             if Array.length filesWithOptions > numThreads * 2 then do
-              -- Worker location for production bin.
+              -- Worker location for production bin
               let bundleLocation = Path.concat [ srcLocation, "bundle", "Bin.Worker", "index.js" ]
-              -- Worker location for dev.
+              -- Worker location for local dev
               let outputLocation = Path.concat [ srcLocation, "output", "Bin.Worker", "index.js" ]
               worker <-
                 oneOf
                   [ FS.stat bundleLocation $> Worker.unsafeWorkerFromPath bundleLocation
-                  , FS.stat outputLocation $> Worker.unsafeWorkerFromPathAndExport
-                      { filePath: outputLocation
-                      , export: "main"
-                      }
+                  , FS.stat outputLocation $> Worker.unsafeWorkerFromPath outputLocation
                   ]
                   <|> throwError (error "Worker not found")
               poolTraverse worker workerData numThreads filesWithOptions
@@ -278,7 +276,7 @@ main = launchAff_ do
               liftEffect $ Process.exit 1
             Right str ->
               makeAff \k -> do
-                _ <- Stream.writeString Process.stdout UTF8 str (k (Right unit))
+                _ <- Stream.writeString Process.stdout UTF8 str (const (k (Right unit)))
                 pure mempty
 
 expandGlobs :: Array String -> Aff (Array String)
@@ -407,4 +405,3 @@ generateOperatorsCommand globs = do
                 OperatorValue -> ".(" <> unwrap op <> ")"
             , " " <> show prec
             ]
-
