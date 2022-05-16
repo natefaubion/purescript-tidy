@@ -14,6 +14,9 @@
     "bundle/**/*.js"
   ],
   "scripts": {
+    "preversion": "rm -rf output bundle && npm run bundle && npm run test",
+    "version": "echo 'export const version = \"v'$npm_package_version'\";' > ./bin/Bin/Version.js && git add ./bin/Bin/Version.js",
+    "postversion": "git push && git push --tags",
     "build": "spago -x bin/spago.dhall build",
     "bundle": "npm run build && npm run bundle:main && npm run bundle:worker",
     "bundle:main": "spago -x bin/spago.dhall bundle-module --platform node --to './bundle/Main/index.js' --no-build --quiet",
@@ -21,8 +24,7 @@
     "test": "spago -x test/spago.dhall test",
     "generate-default-operators": "spago -x script/spago.dhall run -m GenerateDefaultOperatorsModule",
     "format-self": "npm run build && node ./bin/index.js format-in-place src 'test/*.purs' bin script",
-    "check-self": "node ./bin/index.js check src 'test/*.purs' bin script",
-    "prepublishOnly": "rm -rf output bundle && npm run bundle"
+    "check-self": "node ./bin/index.js check src 'test/*.purs' bin script"
   },
   "repository": {
     "type": "git",
