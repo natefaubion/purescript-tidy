@@ -8,7 +8,7 @@ A syntax tidy-upper (formatter) for PureScript.
 $ npm install -g purs-tidy
 ```
 
-Also available for [Nix](https://nixos.org/) via [Easy PureScript Nix](https://github.com/justinwoo/easy-purescript-nix)
+Also available for [Nix](https://nixos.org/) via [Nixpkgs 22.11+](https://search.nixos.org/packages?channel=unstable&from=0&size=50&sort=relevance&type=packages&query=purs-tidy) and [Easy PureScript Nix](https://github.com/justinwoo/easy-purescript-nix)
 
 ## Usage
 
