@@ -1,5 +1,4 @@
 #!/usr/bin/env -S node --experimental-json-modules
-import path from "path";
 import url from "url";
 import { main } from "../output/Main/index.js";
 
