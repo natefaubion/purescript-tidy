@@ -26,8 +26,8 @@ jobs:
             .spago
             output
 
-      - name: Install esbuild
-        run: npm install --global esbuild@0.14.x
+      - name: Install esbuild and dev dependencies
+        run: npm install --global esbuild@0.14.x && npm install
 
       - name: Build source
         run: npm run bundle
