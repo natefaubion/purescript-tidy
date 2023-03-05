@@ -25,7 +25,8 @@ import Node.Path (FilePath)
 import Node.WorkerBees as Worker
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST (RecoveredParserResult(..), parseModule)
-import PureScript.CST.Errors (ParseError, printParseError)
+import PureScript.CST.Errors (printParseError)
+import PureScript.CST.Parser.Monad (PositionedError)
 import Tidy (defaultFormatOptions, formatModule, toDoc)
 import Tidy.Operators (parseOperatorTable)
 import Tidy.Precedence (PrecedenceMap, remapOperators)
@@ -70,7 +71,7 @@ type WorkerOutput =
   , timing :: Number
   }
 
-formatCommand :: FormatOptions -> PrecedenceMap -> String -> Either ParseError String
+formatCommand :: FormatOptions -> PrecedenceMap -> String -> Either String String
 formatCommand args operators contents = do
   let
     print = Dodo.print Dodo.plainText
@@ -92,9 +93,13 @@ formatCommand args operators contents = do
           }
       Right $ print $ toDoc $ formatModule opts ok
     ParseSucceededWithErrors _ errs -> do
-      Left (NonEmptyArray.head errs).error
+      Left $ printPositionedError $ NonEmptyArray.head errs
     ParseFailed err ->
-      Left err.error
+      Left $ printPositionedError err
+
+printPositionedError :: PositionedError -> String
+printPositionedError { error, position } =
+  "[" <> show (position.line + 1) <> ":" <> show (position.column + 1) <> "] " <> printParseError error
 
 formatInPlaceCommand :: Boolean -> PrecedenceMap -> WorkerInput -> Aff WorkerOutput
 formatInPlaceCommand shouldCheck operators { filePath, config } = do
@@ -129,8 +134,8 @@ formatInPlaceCommand shouldCheck operators { filePath, config } = do
       else do
         FS.writeTextFile UTF8 filePath formatted
         pure { filePath, error: "", alreadyFormatted: false, timing }
-    Left err ->
-      pure { filePath, error: printParseError err, alreadyFormatted: false, timing: zero }
+    Left error ->
+      pure { filePath, error, alreadyFormatted: false, timing: zero }
 
 main :: Effect Unit
 main = Worker.makeAsMain \{ receive, reply, workerData: { shouldCheck, operatorsByPath } } -> do

@@ -53,7 +53,6 @@ import Node.Stream as Stream
 import Node.WorkerBees as Worker
 import Node.WorkerBees.Aff.Pool (poolTraverse)
 import PureScript.CST (RecoveredParserResult(..), parseModule, toRecovered)
-import PureScript.CST.Errors (printParseError)
 import PureScript.CST.ModuleGraph (ModuleSort(..), sortModules)
 import PureScript.CST.Types (Module(..), ModuleHeader(..), Name(..))
 import Tidy.Operators (parseOperatorTable, resolveOperatorExports)
@@ -272,7 +271,7 @@ main = launchAff_ do
           contents <- readStdin
           case formatCommand options operators contents of
             Left err -> do
-              Console.error $ printParseError err
+              Console.error err
               liftEffect $ Process.exit 1
             Right str ->
               makeAff \k -> do
