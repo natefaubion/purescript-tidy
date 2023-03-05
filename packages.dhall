@@ -37,3 +37,6 @@ in upstream
     , repo = "https://github.com/natefaubion/purescript-node-workerbees.git"
     , version = "node-esm"
     }
+
+  with language-cst-parser =
+    (upstream.language-cst-parser with version = "v0.12.2")

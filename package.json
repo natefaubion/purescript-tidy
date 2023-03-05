@@ -43,6 +43,6 @@
   },
   "homepage": "https://github.com/natefaubion/purescript-tidy#readme",
   "devDependencies": {
-    "purs-backend-es": "^1.0.2"
+    "purs-backend-es": "^1.3.1"
   }
 }
