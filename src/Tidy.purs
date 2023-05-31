@@ -33,7 +33,7 @@ import Data.Tuple (Tuple(..), fst, snd)
 import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Types (Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), OneOrDelimited(..), Operator, PatternGuard(..), Proper, QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
+import PureScript.CST.Types (AppSpine(..), Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), OneOrDelimited(..), Operator, PatternGuard(..), Prefixed(..), Proper, QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), TypeVarBindingWithVisibility, ValueBindingFields, Where(..), Wrapped(..))
 import Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, break, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingBlockComment, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingBlockComment, trailingLineComment)
 import Tidy.Doc (FormatDoc, toDoc) as Exports
 import Tidy.Doc as Doc
@@ -192,6 +192,10 @@ formatString = splitStringEscapeLines >>> Array.uncons >>> foldMap \{ head, tail
 
 formatName :: forall e a n. Format (Name n) e a
 formatName conf (Name { token }) = formatToken conf token
+
+formatPrefixedName :: forall e a n. Format (Prefixed (Name n)) e a
+formatPrefixedName conf (Prefixed { prefix, value: Name { token } }) =
+  foldMap (formatToken conf) prefix <> formatToken conf token
 
 formatQualifiedName :: forall e a n. Format (QualifiedName n) e a
 formatQualifiedName conf (QualifiedName { token }) = formatToken conf token
@@ -514,7 +518,7 @@ formatDataHead :: forall e a. Format (DataHead e) e a
 formatDataHead conf { keyword, name, vars } =
   formatToken conf keyword `space` indent do
     anchor (formatName conf name)
-      `flexSpaceBreak` joinWithMap spaceBreak (formatTypeVarBinding conf) vars
+      `flexSpaceBreak` joinWithMap spaceBreak (formatTypeVarBindingPlain conf) vars
 
 formatDataCtor :: forall e a. Format (DataCtor e) e a
 formatDataCtor conf = Hang.toFormatDoc <<< formatHangingDataCtor conf
@@ -536,7 +540,7 @@ formatClassHead conf (Tuple cls wh) =
         flexGroup do
           formatName conf cls.name
             `spaceBreak`
-              joinWithMap spaceBreak (indent <<< formatTypeVarBinding conf) cls.vars
+              joinWithMap spaceBreak (indent <<< formatTypeVarBindingPlain conf) cls.vars
       `spaceBreak`
         flexGroup do
           anchor (foldMap formatFundeps cls.fundeps)
@@ -618,15 +622,28 @@ formatInstanceBinding conf = case _ of
   InstanceBindingName vbf ->
     formatValueBinding conf vbf
 
-formatTypeVarBinding :: forall e a. Format (TypeVarBinding e) e a
+formatTypeVarBinding :: forall e a. Format (TypeVarBindingWithVisibility e) e a
 formatTypeVarBinding conf = case _ of
   TypeVarKinded w ->
     formatParensBlock formatKindedTypeVarBinding conf w
   TypeVarName n ->
+    formatPrefixedName conf n
+
+formatKindedTypeVarBinding :: forall e a. Format (Labeled (Prefixed (Name Ident)) (Type e)) e a
+formatKindedTypeVarBinding conf (Labeled { label, separator, value }) =
+  formatPrefixedName conf label `space` indent do
+    anchor (formatToken conf separator)
+      `flexSpaceBreak` formatType conf value
+
+formatTypeVarBindingPlain :: forall e a. Format (TypeVarBinding (Name Ident) e) e a
+formatTypeVarBindingPlain conf = case _ of
+  TypeVarKinded w ->
+    formatParensBlock formatKindedTypeVarBindingPlain conf w
+  TypeVarName n ->
     formatName conf n
 
-formatKindedTypeVarBinding :: forall e a. Format (Labeled (Name Ident) (Type e)) e a
-formatKindedTypeVarBinding conf (Labeled { label, separator, value }) =
+formatKindedTypeVarBindingPlain :: forall e a. Format (Labeled (Name Ident) (Type e)) e a
+formatKindedTypeVarBindingPlain conf (Labeled { label, separator, value }) =
   formatName conf label `space` indent do
     anchor (formatToken conf separator)
       `flexSpaceBreak` formatType conf value
@@ -720,7 +737,7 @@ formatHangingType :: forall e a. FormatHanging (Type e) e a
 formatHangingType conf = formatHangingPolytype identity conf <<< toPolytype
 
 data Poly e
-  = PolyForall SourceToken (NonEmptyArray (TypeVarBinding e)) SourceToken
+  = PolyForall SourceToken (NonEmptyArray (TypeVarBindingWithVisibility e)) SourceToken
   | PolyArrow (Type e) SourceToken
 
 type Polytype e =
@@ -887,7 +904,7 @@ formatHangingExpr conf = case _ of
   ExprApp expr exprs ->
     hangApp
       (formatHangingExpr conf expr)
-      (map (formatHangingExpr conf) exprs)
+      (map (formatHangingExprAppSpine conf) exprs)
 
   ExprLambda lmb ->
     hang
@@ -946,6 +963,13 @@ formatHangingExpr conf = case _ of
 
   ExprError e ->
     hangBreak $ conf.formatError e
+
+formatHangingExprAppSpine :: forall e a. FormatHanging (AppSpine Expr e) e a
+formatHangingExprAppSpine conf = case _ of
+  AppVisibleType tok ty ->
+    hangBreak $ formatToken conf tok <> formatType conf ty
+  AppTerm expr ->
+    formatHangingExpr conf expr
 
 data ElseIfChain e
   = IfThen SourceToken (Expr e) SourceToken (Expr e)
