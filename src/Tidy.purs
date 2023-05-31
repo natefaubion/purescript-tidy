@@ -33,7 +33,7 @@ import Data.Tuple (Tuple(..), fst, snd)
 import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Types (AppSpine(..), Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), OneOrDelimited(..), Operator, PatternGuard(..), Prefixed(..), Proper, QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), TypeVarBindingWithVisibility, ValueBindingFields, Where(..), Wrapped(..))
+import PureScript.CST.Types (AppSpine(..), Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), OneOrDelimited(..), Operator, PatternGuard(..), Prefixed(..), Proper, QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
 import Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, break, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingBlockComment, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingBlockComment, trailingLineComment)
 import Tidy.Doc (FormatDoc, toDoc) as Exports
 import Tidy.Doc as Doc
@@ -622,7 +622,7 @@ formatInstanceBinding conf = case _ of
   InstanceBindingName vbf ->
     formatValueBinding conf vbf
 
-formatTypeVarBinding :: forall e a. Format (TypeVarBindingWithVisibility e) e a
+formatTypeVarBinding :: forall e a. Format (TypeVarBinding (Prefixed (Name Ident)) e) e a
 formatTypeVarBinding conf = case _ of
   TypeVarKinded w ->
     formatParensBlock formatKindedTypeVarBinding conf w
@@ -737,7 +737,7 @@ formatHangingType :: forall e a. FormatHanging (Type e) e a
 formatHangingType conf = formatHangingPolytype identity conf <<< toPolytype
 
 data Poly e
-  = PolyForall SourceToken (NonEmptyArray (TypeVarBindingWithVisibility e)) SourceToken
+  = PolyForall SourceToken (NonEmptyArray (TypeVarBinding (Prefixed (Name Ident)) e)) SourceToken
   | PolyArrow (Type e) SourceToken
 
 type Polytype e =
@@ -966,7 +966,7 @@ formatHangingExpr conf = case _ of
 
 formatHangingExprAppSpine :: forall e a. FormatHanging (AppSpine Expr e) e a
 formatHangingExprAppSpine conf = case _ of
-  AppVisibleType tok ty ->
+  AppType tok ty ->
     hangBreak $ formatToken conf tok <> formatType conf ty
   AppTerm expr ->
     formatHangingExpr conf expr
