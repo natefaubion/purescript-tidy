@@ -348,11 +348,13 @@ resolveRcForDir root = go List.Nil
           case FormatOptions.fromJson =<< parseJson contents' of
             Left jsonError ->
               throwError $ error $ "Could not decode " <> filePath <> ": " <> printJsonDecodeError jsonError
-            Right options -> do
-              let
-                resolvedOptions =
-                  options { operatorsFile = Path.relative dir <$> options.operatorsFile }
-              pure $ unwind cache (Just resolvedOptions) (List.Cons dir paths)
+            Right options -> case options.operatorsFile of
+              Nothing -> pure $ unwind cache (Just options) (List.Cons dir paths)
+              Just file -> do
+                operatorsFile <- liftEffect $ Path.resolve [ dir ] file
+                let
+                  resolvedOptions = options { operatorsFile = Just operatorsFile }
+                pure $ unwind cache (Just resolvedOptions) (List.Cons dir paths)
 
   unwind :: RcMap -> Maybe FormatOptions -> List FilePath -> Tuple (Maybe FormatOptions) RcMap
   unwind cache res = case _ of
