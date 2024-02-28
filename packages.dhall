@@ -39,4 +39,4 @@ in upstream
     }
 
   with language-cst-parser =
-    (upstream.language-cst-parser with version = "v0.13.0")
+    (upstream.language-cst-parser with version = "v0.14.0")

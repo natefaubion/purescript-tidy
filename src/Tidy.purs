@@ -120,7 +120,8 @@ instance formatErrorRecoveredError :: FormatError RecoveredError where
     goComments :: forall a b. Int -> { line :: Boolean, doc :: Dodo.Doc b } -> Comment a -> { line :: Boolean, doc :: Dodo.Doc b }
     goComments ind acc = case _ of
       Comment str
-        | SCU.take 2 str == "--" ->
+        | leading <- SCU.take 2 str
+        , leading == "--" || leading == "#!" ->
             { line: false, doc: acc.doc <> Dodo.text str }
         | otherwise ->
             { line: false, doc: acc.doc <> Dodo.lines (Dodo.text <$> splitLines str) }
@@ -145,7 +146,8 @@ formatComment
   -> FormatDoc a
 formatComment lineComment blockComment com next = case com of
   Comment str
-    | SCU.take 2 str == "--" ->
+    | leading <- SCU.take 2 str
+    , leading == "--" || leading == "#!" ->
         lineComment str next
     | otherwise ->
         blockComment str next
