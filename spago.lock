@@ -39,7 +39,6 @@ workspace:
         - tuples
       test_dependencies:
         - spec
-        - tidy-cli
       build_plan:
         - aff
         - ansi
@@ -110,7 +109,6 @@ workspace:
         - st
         - strings
         - tailrec
-        - tidy-cli
         - transformers
         - tuples
         - type-equality
@@ -153,6 +151,7 @@ workspace:
         - prelude
         - refs
         - strings
+        - tidy
         - transformers
         - tuples
       test_dependencies: []
@@ -182,6 +181,7 @@ workspace:
         - foldable-traversable
         - foreign
         - foreign-object
+        - fork
         - free
         - functions
         - functors
@@ -194,11 +194,14 @@ workspace:
         - lazy
         - lists
         - maybe
+        - mmorph
         - newtype
         - node-buffer
+        - node-child-process
         - node-event-emitter
         - node-fs
         - node-glob-basic
+        - node-os
         - node-path
         - node-process
         - node-streams
@@ -211,15 +214,18 @@ workspace:
         - orders
         - parallel
         - partial
+        - pipes
         - posix-types
         - prelude
         - profunctor
         - record
         - refs
         - safe-coerce
+        - spec
         - st
         - strings
         - tailrec
+        - tidy
         - transformers
         - tuples
         - type-equality

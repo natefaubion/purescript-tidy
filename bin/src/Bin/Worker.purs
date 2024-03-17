@@ -2,8 +2,8 @@ module Bin.Worker where
 
 import Prelude
 
-import Bin.FormatOptions (FormatOptions)
-import Bin.FormatOptions as FormatOptions
+import Tidy.FormatOptions (FormatOptions)
+import Tidy.FormatOptions as FormatOptions
 import Bin.Timing (hrtime, hrtimeDiff, toMilliseconds)
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Either (Either(..), either, fromRight')

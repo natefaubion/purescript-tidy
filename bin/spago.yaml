@@ -35,4 +35,4 @@ package:
   - strings
   - transformers
   - tuples
-  # - tidy
+  - tidy

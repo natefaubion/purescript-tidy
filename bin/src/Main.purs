@@ -4,8 +4,8 @@ import Prelude
 
 import ArgParse.Basic (ArgParser)
 import ArgParse.Basic as Arg
-import Bin.FormatOptions (FormatOptions, formatOptions)
-import Bin.FormatOptions as FormatOptions
+import Tidy.FormatOptions (FormatOptions, formatOptions)
+import Tidy.FormatOptions as FormatOptions
 import Bin.Version (version)
 import Bin.Worker (WorkerData, WorkerInput, WorkerOutput, formatCommand, formatInPlaceCommand, toWorkerConfig)
 import Control.Monad.State (evalStateT, lift)

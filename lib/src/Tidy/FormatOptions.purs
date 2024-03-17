@@ -1,4 +1,4 @@
-module Bin.FormatOptions where
+module Tidy.FormatOptions where
 
 import Prelude
 

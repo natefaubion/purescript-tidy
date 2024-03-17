@@ -46,7 +46,7 @@ package:
     #   - "lib/test/snapshots/*" # TODO: doesnt work
     dependencies:
       - spec
-      - tidy-cli
+      # - tidy-cli
 publish:
   exclude:
     - "test/snapshots/**/*"

@@ -9,7 +9,7 @@ module Test.FormatDirective
 import Prelude
 
 import ArgParse.Basic (ArgError, parseArgs, printArgError)
-import Bin.FormatOptions as Bin
+import Tidy.FormatOptions (FormatOptions, formatOptions) as Tidy.FormatOptions
 import Data.Array as Array
 import Data.Bifunctor (bimap)
 import Data.Either (Either(..))
@@ -96,10 +96,10 @@ parseDirectivesFromModule (Module { header: ModuleHeader header, body }) =
   parseFormatOptions :: Array String -> Either String (FormatDirective e a)
   parseFormatOptions = bimap printArgError fromBinFormatOptions <<< parse
     where
-    parse :: Array String -> Either ArgError Bin.FormatOptions
-    parse = parseArgs "format-directives" "Parse format directives." Bin.formatOptions
+    parse :: Array String -> Either ArgError Tidy.FormatOptions.FormatOptions
+    parse = parseArgs "format-directives" "Parse format directives." Tidy.FormatOptions.formatOptions
 
-  fromBinFormatOptions :: Bin.FormatOptions -> FormatDirective e a
+  fromBinFormatOptions :: Tidy.FormatOptions.FormatOptions -> FormatDirective e a
   fromBinFormatOptions opts =
     { printOptions:
         { indentUnit: power " " opts.indent
