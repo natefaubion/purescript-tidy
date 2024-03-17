@@ -25,22 +25,28 @@ main :: Effect Unit
 main = do
   cwdPath <- cwd
   tmpPath <- tmpdir "purs-tidy-generate-default-operators-"
+  Console.log $ "Working in " <> tmpPath
 
   let optsModifier x = x { cwd = Just tmpPath }
   let genCmd = Path.concat [ cwdPath, "bin", "index.js" ] <> " generate-operators '.spago/*/*/src/**/*.purs'"
 
-  writeTextFile UTF8 (Path.concat [ tmpPath, "spago.dhall" ]) defaultSpagoDhall
+  writeTextFile UTF8 (Path.concat [ tmpPath, "spago.yaml" ]) defaultSpagoYaml
   writeTextFile UTF8 (Path.concat [ tmpPath, "package.json" ]) defaultPackageJson
   _ <- ChildProcess.execSync' "npm install" optsModifier
+  Console.log $ "Using command " <> genCmd
   output <- Buffer.toString UTF8 =<< catchException
     ( \err -> do
         stdout <- Buffer.toString UTF8 ((unsafeCoerce err).stdout :: Buffer)
         stderr <- Buffer.toString UTF8 ((unsafeCoerce err).stderr :: Buffer)
+        Console.log "Caught exception:"
         Console.log stdout
         Console.error stderr
         throwException err
     )
     (ChildProcess.execSync' genCmd optsModifier)
+
+  Console.log "output:"
+  Console.log output
 
   let
     header =
@@ -67,7 +73,7 @@ main = do
     contents =
       Array.intercalate "\n" (header <> lines <> footer)
 
-  writeTextFile UTF8 (Path.concat [ cwdPath, "src", "Tidy", "Operators", "Defaults.purs" ]) contents
+  writeTextFile UTF8 (Path.concat [ cwdPath, "lib", "src", "Tidy", "Operators", "Defaults.purs" ]) contents
 
 defaultPackageJson :: String
 defaultPackageJson =
@@ -76,8 +82,8 @@ defaultPackageJson =
     "private": true,
     "type": "module",
     "dependencies": {
-      "purescript": "^0.15.0",
-      "spago": "^0.20.8"
+      "purescript": "latest",
+      "spago": "next"
     },
     "scripts": {
       "postinstall": "spago install"
@@ -85,115 +91,116 @@ defaultPackageJson =
   }
   """
 
-defaultSpagoDhall :: String
-defaultSpagoDhall =
+-- TODO: can use `spago package ls` with `dependencies: []`
+defaultSpagoYaml :: String
+defaultSpagoYaml =
   """
-  { name = "purs-tidy-generate-default-operators"
-  , dependencies =
-    [ "ace"
-    , "aff"
-    , "aff-bus"
-    , "aff-coroutines"
-    , "affjax"
-    , "argonaut"
-    , "argonaut-codecs"
-    , "argonaut-core"
-    , "argonaut-generic"
-    , "argonaut-traversals"
-    , "arraybuffer-types"
-    , "arrays"
-    , "assert"
-    , "avar"
-    , "bifunctors"
-    , "catenable-lists"
-    , "concurrent-queues"
-    , "console"
-    , "const"
-    , "contravariant"
-    , "control"
-    , "coroutines"
-    , "datetime"
-    , "distributive"
-    , "effect"
-    , "either"
-    , "enums"
-    , "exceptions"
-    , "exists"
-    , "filterable"
-    , "fixed-points"
-    , "foldable-traversable"
-    , "foreign"
-    , "foreign-object"
-    , "fork"
-    , "form-urlencoded"
-    , "formatters"
-    , "free"
-    , "freet"
-    , "functions"
-    , "functors"
-    , "gen"
-    , "github-actions-toolkit"
-    , "graphs"
-    , "http-methods"
-    , "identity"
-    , "integers"
-    , "invariant"
-    , "js-date"
-    , "js-timers"
-    , "js-uri"
-    , "lazy"
-    , "lcg"
-    , "lists"
-    , "machines"
-    , "matryoshka"
-    , "maybe"
-    , "media-types"
-    , "minibench"
-    , "newtype"
-    , "nonempty"
-    , "now"
-    , "nullable"
-    , "numbers"
-    , "options"
-    , "ordered-collections"
-    , "orders"
-    , "parallel"
-    , "parsing"
-    , "partial"
-    , "pathy"
-    , "precise"
-    , "prelude"
-    , "profunctor"
-    , "profunctor-lenses"
-    , "psci-support"
-    , "quickcheck"
-    , "quickcheck-laws"
-    , "random"
-    , "react"
-    , "react-dom"
-    , "record"
-    , "refs"
-    , "routing"
-    , "safe-coerce"
-    , "semirings"
-    , "st"
-    , "string-parsers"
-    , "strings"
-    , "strings-extra"
-    , "tailrec"
-    , "these"
-    , "transformers"
-    , "tuples"
-    , "type-equality"
-    , "typelevel-prelude"
-    , "unfoldable"
-    , "unicode"
-    , "unsafe-coerce"
-    , "unsafe-reference"
-    , "uri"
-    , "validation"
-    ]
-  , packages = https://github.com/purescript/package-sets/releases/download/psc-0.15.0-20220513/packages.dhall
-  , sources = [] : List Text
-  }
+package:
+  name: purs-tidy-generate-default-operators
+  dependencies:
+    - ace
+    - aff
+    - aff-bus
+    - aff-coroutines
+    - affjax
+    - argonaut
+    - argonaut-codecs
+    - argonaut-core
+    - argonaut-generic
+    - argonaut-traversals
+    - arraybuffer-types
+    - arrays
+    - assert
+    - avar
+    - bifunctors
+    - catenable-lists
+    - concurrent-queues
+    - console
+    - const
+    - contravariant
+    - control
+    - coroutines
+    - datetime
+    - distributive
+    - effect
+    - either
+    - enums
+    - exceptions
+    - exists
+    - filterable
+    - fixed-points
+    - foldable-traversable
+    - foreign
+    - foreign-object
+    - fork
+    - form-urlencoded
+    - formatters
+    - free
+    - freet
+    - functions
+    - functors
+    - gen
+    # - github-actions-toolkit # TODO: fix `The following packages do not exist in your package set`
+    - graphs
+    - http-methods
+    - identity
+    - integers
+    - invariant
+    - js-date
+    - js-timers
+    - js-uri
+    - lazy
+    - lcg
+    - lists
+    - machines
+    - matryoshka
+    - maybe
+    - media-types
+    - minibench
+    - newtype
+    - nonempty
+    - now
+    - nullable
+    - numbers
+    - options
+    - ordered-collections
+    - orders
+    - parallel
+    - parsing
+    - partial
+    - pathy
+    - precise
+    - prelude
+    - profunctor
+    - profunctor-lenses
+    - psci-support
+    - quickcheck
+    - quickcheck-laws
+    - random
+    - react
+    - react-dom
+    - record
+    - refs
+    - routing
+    - safe-coerce
+    - semirings
+    - st
+    - string-parsers
+    - strings
+    - strings-extra
+    - tailrec
+    - these
+    - transformers
+    - tuples
+    - type-equality
+    - typelevel-prelude
+    - unfoldable
+    - unicode
+    - unsafe-coerce
+    - unsafe-reference
+    - uri
+    - validation
+workspace:
+  package_set:
+    registry: 50.4.0
 """

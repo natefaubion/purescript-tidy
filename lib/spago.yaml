@@ -39,11 +39,11 @@ package:
     main: Test.Main
     # execArgs:
     #   - "--exclude-files"
-    #   - "snapshots/*" # TODO: doesnt work
+    #   - "snapshots/*" # doesnt work
     #   - "--exclude-files"
-    #   - "test/snapshots/*" # TODO: doesnt work
+    #   - "test/snapshots/*" # doesnt work
     #   - "--exclude-files"
-    #   - "lib/test/snapshots/*" # TODO: doesnt work
+    #   - "lib/test/snapshots/*" # doesnt work
     dependencies:
       - spec
       # - tidy-cli
