@@ -28,8 +28,9 @@ import Effect.Exception (error)
 import Node.Buffer (Buffer, freeze)
 import Node.Buffer as Buffer
 import Node.Buffer.Immutable as ImmutableBuffer
-import Node.ChildProcess (ExecResult, defaultExecOptions)
+import Node.ChildProcess (ExecResult)
 import Node.ChildProcess as ChildProcess
+import Node.ChildProcess.Types as ChildProcess
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readFile, writeFile)
 import Node.Glob.Basic (expandGlobs)
@@ -238,8 +239,8 @@ snapshotFormat accept mbPattern = do
 
 exec :: String -> Aff ExecResult
 exec command = makeAff \k -> do
-  childProc <- ChildProcess.exec command (defaultExecOptions { shell = Just "/bin/bash" }) (k <<< pure)
-  pure $ effectCanceler $ ChildProcess.kill SIGABRT childProc
+  childProc <- ChildProcess.exec' command (\x -> x { shell = Just (ChildProcess.customShell "/bin/bash") }) (k <<< pure)
+  pure $ effectCanceler $ map (const unit) $ ChildProcess.killSignal SIGABRT childProc
 
 bufferToUTF8 :: Buffer -> Effect String
 bufferToUTF8 = map (ImmutableBuffer.toString UTF8) <<< freeze

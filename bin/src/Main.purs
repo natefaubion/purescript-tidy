@@ -34,11 +34,10 @@ import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
-import Effect.Aff (Aff, error, launchAff_, makeAff, throwError, try)
+import Effect.Aff (Aff, error, launchAff_, throwError, try)
 import Effect.Aff as Aff
 import Effect.Class (liftEffect)
 import Effect.Class.Console as Console
-import Effect.Ref as Ref
 import Foreign.Object (Object)
 import Foreign.Object as Object
 import Node.Buffer as Buffer
@@ -49,7 +48,7 @@ import Node.Glob.Basic (expandGlobsCwd, expandGlobsWithStatsCwd)
 import Node.Path (FilePath)
 import Node.Path as Path
 import Node.Process as Process
-import Node.Stream as Stream
+import Node.Stream.Aff as Stream.Aff
 import Node.WorkerBees as Worker
 import Node.WorkerBees.Aff.Pool (poolTraverse)
 import PureScript.CST (RecoveredParserResult(..), parseModule, toRecovered)
@@ -163,11 +162,11 @@ main = launchAff_ do
       Console.log $ Arg.printArgError err
       case err of
         Arg.ArgError _ Arg.ShowHelp ->
-          liftEffect $ Process.exit 0
+          liftEffect $ Process.exit
         Arg.ArgError _ (Arg.ShowInfo _) ->
-          liftEffect $ Process.exit 0
+          liftEffect $ Process.exit' 0
         _ ->
-          liftEffect $ Process.exit 1
+          liftEffect $ Process.exit' 1
     Right cmd ->
       case cmd of
         GenerateOperators globs ->
@@ -180,7 +179,7 @@ main = launchAff_ do
             FS.writeTextFile UTF8 rcFileName $ contents <> "\n"
           else do
             Console.error $ rcFileName <> " already exists."
-            liftEffect $ Process.exit 1
+            liftEffect $ Process.exit' 1
 
         FormatInPlace mode cliOptions configOption numThreads printTiming globs -> do
           currentDir <- liftEffect Process.cwd
@@ -251,7 +250,7 @@ main = launchAff_ do
             Check -> liftEffect do
               if Array.null errors && Array.null notFormatted then do
                 Console.log "All files are formatted."
-                Process.exit 0
+                Process.exit
               else do
                 unless (Array.null errors) do
                   Console.log "Some files have errors:\n"
@@ -260,7 +259,7 @@ main = launchAff_ do
                 unless (Array.null notFormatted) do
                   Console.log "Some files are not formatted:\n"
                   for_ notFormatted Console.error
-                Process.exit 1
+                Process.exit' 1
 
         Format cliOptions configOption -> do
           currentDir <- liftEffect Process.cwd
@@ -272,11 +271,8 @@ main = launchAff_ do
           case formatCommand options operators contents of
             Left err -> do
               Console.error err
-              liftEffect $ Process.exit 1
-            Right str ->
-              makeAff \k -> do
-                _ <- Stream.writeString Process.stdout UTF8 str (const (k (Right unit)))
-                pure mempty
+              liftEffect $ Process.exit' 1
+            Right str -> Stream.Aff.write Process.stdout =<< Stream.Aff.fromStringUTF8 str
 
 expandGlobs :: Array String -> Aff (Array String)
 expandGlobs = map dirToGlob >>> expandGlobsWithStatsCwd >>> map onlyFiles
@@ -303,7 +299,7 @@ getOptions cliOptions rcOptions filePath = case _ of
     case rcOptions of
       Nothing -> do
         Console.error $ rcFileName <> " not found for " <> filePath
-        liftEffect $ Process.exit 1
+        liftEffect $ Process.exit' 1
       Just options ->
         pure options
 
@@ -360,13 +356,7 @@ resolveRcForDir root = go List.Nil
       Tuple res cache
 
 readStdin :: Aff String
-readStdin = makeAff \k -> do
-  contents <- Ref.new []
-  Stream.onData Process.stdin \buff -> do
-    void $ Ref.modify (_ `Array.snoc` buff) contents
-  Stream.onEnd Process.stdin do
-    k <<< Right =<< Buffer.toString UTF8 =<< Buffer.concat =<< Ref.read contents
-  pure mempty
+readStdin = Stream.Aff.readableToStringUtf8 Process.stdin
 
 generateOperatorsCommand :: Array String -> Aff Unit
 generateOperatorsCommand globs = do

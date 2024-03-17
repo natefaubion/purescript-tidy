@@ -37,13 +37,16 @@ package:
   - tuples
   test:
     main: Test.Main
-    execArgs:
-      - "--exclude-files"
-      - "snapshots/**/*" # TODO: doesnt work
-      - "test/snapshots/**/*" # TODO: doesnt work
-      - "lib/test/snapshots/**/*" # TODO: doesnt work
+    # execArgs:
+    #   - "--exclude-files"
+    #   - "snapshots/*" # TODO: doesnt work
+    #   - "--exclude-files"
+    #   - "test/snapshots/*" # TODO: doesnt work
+    #   - "--exclude-files"
+    #   - "lib/test/snapshots/*" # TODO: doesnt work
     dependencies:
       - spec
+      - tidy-cli
 publish:
   exclude:
     - "test/snapshots/**/*"

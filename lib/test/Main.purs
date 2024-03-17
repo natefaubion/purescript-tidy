@@ -31,7 +31,7 @@ main = do
     results@(SnapshotResultGroup { hasBad }) <- snapshotFormat accept filter
     printResult 0 results
     when hasBad do
-      liftEffect $ Process.exit 1
+      liftEffect $ Process.exit' 1
   where
   indent :: Int -> String
   indent = fold <<< flip Array.replicate "  "
