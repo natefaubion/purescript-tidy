@@ -4,8 +4,6 @@ import Prelude
 
 import ArgParse.Basic (ArgParser)
 import ArgParse.Basic as Arg
-import Tidy.FormatOptions (FormatOptions, formatOptions)
-import Tidy.FormatOptions as FormatOptions
 import Bin.Version (version)
 import Bin.Worker (WorkerData, WorkerInput, WorkerOutput, formatCommand, formatInPlaceCommand, toWorkerConfig)
 import Control.Monad.State (evalStateT, lift)
@@ -54,6 +52,8 @@ import Node.WorkerBees.Aff.Pool (poolTraverse)
 import PureScript.CST (RecoveredParserResult(..), parseModule, toRecovered)
 import PureScript.CST.ModuleGraph (ModuleSort(..), sortModules)
 import PureScript.CST.Types (Module(..), ModuleHeader(..), Name(..))
+import Tidy.FormatOptions (FormatOptions, formatOptions)
+import Tidy.FormatOptions as FormatOptions
 import Tidy.Operators (parseOperatorTable, resolveOperatorExports)
 import Tidy.Operators.Defaults (defaultOperators)
 import Tidy.Precedence (OperatorNamespace(..), PrecedenceMap)

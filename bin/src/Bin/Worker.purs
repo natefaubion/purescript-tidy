@@ -2,8 +2,6 @@ module Bin.Worker where
 
 import Prelude
 
-import Tidy.FormatOptions (FormatOptions)
-import Tidy.FormatOptions as FormatOptions
 import Bin.Timing (hrtime, hrtimeDiff, toMilliseconds)
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Either (Either(..), either, fromRight')
@@ -28,6 +26,8 @@ import PureScript.CST (RecoveredParserResult(..), parseModule)
 import PureScript.CST.Errors (printParseError)
 import PureScript.CST.Parser.Monad (PositionedError)
 import Tidy (defaultFormatOptions, formatModule, toDoc)
+import Tidy.FormatOptions (FormatOptions)
+import Tidy.FormatOptions as FormatOptions
 import Tidy.Operators (parseOperatorTable)
 import Tidy.Precedence (PrecedenceMap, remapOperators)
 

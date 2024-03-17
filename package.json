@@ -17,11 +17,11 @@
     "version": "echo 'export const version = \"v'$npm_package_version'\";' > ./bin/Bin/Version.js && git add ./bin/Bin/Version.js",
     "postversion": "git push && git push --tags",
     "build": "spago build --package tidy-cli",
-    "bundle": "npm run build:corefn && purs-backend-es build && npm run bundle:main && npm run bundle:worker",
+    "bundle": "npm run build && purs-backend-es build && npm run bundle:main && npm run bundle:worker",
     "bundle:main": "purs-backend-es bundle-module --platform node --to \"./bundle/Main/index.js\" --no-build",
     "bundle:worker": "purs-backend-es bundle-app --platform node --to \"./bundle/Bin.Worker/index.js\" --main Bin.Worker --no-build",
-    "test": "spago test --package lib",
-    "generate-default-operators": "spago run --package script --main GenerateDefaultOperatorsModule",
+    "test": "spago test --package tidy",
+    "generate-default-operators": "spago run --package tidy-script --main GenerateDefaultOperatorsModule",
     "format-self": "npm run build && node ./bin/index.js format-in-place lib/src 'lib/test/*.purs' bin script",
     "check-self": "node ./bin/index.js check lib/src 'lib/test/*.purs' bin script",
     "prepublishOnly": "rm -rf output bundle && npm run bundle"
@@ -42,6 +42,7 @@
   },
   "homepage": "https://github.com/natefaubion/purescript-tidy#readme",
   "devDependencies": {
-    "purs-backend-es": "^1.4.2"
+    "purs-backend-es": "^1.4.2",
+    "esbuild": "latest"
   }
 }

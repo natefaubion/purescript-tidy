@@ -9,7 +9,6 @@ module Test.FormatDirective
 import Prelude
 
 import ArgParse.Basic (ArgError, parseArgs, printArgError)
-import Tidy.FormatOptions (FormatOptions, formatOptions) as Tidy.FormatOptions
 import Data.Array as Array
 import Data.Bifunctor (bimap)
 import Data.Either (Either(..))
@@ -25,6 +24,7 @@ import Data.Tuple (Tuple(..))
 import Dodo (PrintOptions, twoSpaces)
 import PureScript.CST.Types (Comment(..), LineFeed, Module(..), ModuleHeader(..))
 import Tidy (class FormatError, FormatOptions, defaultFormatOptions)
+import Tidy.FormatOptions (FormatOptions, formatOptions) as Tidy.FormatOptions
 
 directiveRegex :: Regex
 directiveRegex = unsafeRegex "\\n-- @format .+\\n" global
