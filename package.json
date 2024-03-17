@@ -16,8 +16,8 @@
   "scripts": {
     "version": "echo 'export const version = \"v'$npm_package_version'\";' > ./bin/Bin/Version.js && git add ./bin/Bin/Version.js",
     "postversion": "git push && git push --tags",
-    "build": "spago build --package bin",
-    "build:corefn": "spago build --package bin --purs-args '--codegen corefn,js'",
+    "build": "spago build --package tidy-cli",
+    "build:corefn": "spago build --package tidy-cli --purs-args '--codegen corefn,js'",
     "bundle": "npm run build:corefn && purs-backend-es build && npm run bundle:main && npm run bundle:worker",
     "bundle:main": "purs-backend-es bundle-module --platform node --to \"./bundle/Main/index.js\" --no-build",
     "bundle:worker": "purs-backend-es bundle-app --platform node --to \"./bundle/Bin.Worker/index.js\" --main Bin.Worker --no-build",

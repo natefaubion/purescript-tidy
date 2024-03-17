@@ -29,8 +29,8 @@ import Node.Buffer (Buffer, freeze)
 import Node.Buffer as Buffer
 import Node.Buffer.Immutable as ImmutableBuffer
 import Node.ChildProcess (ExecResult)
-import Node.ChildProcess as ChildProcess
-import Node.ChildProcess.Types as ChildProcess
+import Node.ChildProcess (exec', killSignal) as ChildProcess
+import Node.ChildProcess.Types (customShell) as ChildProcess
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readFile, writeFile)
 import Node.Glob.Basic (expandGlobs)
@@ -77,7 +77,7 @@ snapshotDirectory =
 
 snapshotFormat :: Boolean -> Maybe Pattern -> Aff SnapshotResultGroup
 snapshotFormat accept mbPattern = do
-  paths <- mapMaybe goPath <<< Array.fromFoldable <$> expandGlobs snapshotDirectory.path [ "**/*.purs" ]
+  paths <- mapMaybe goPath <<< Array.fromFoldable <$> expandGlobs snapshotDirectory.path [ "**/*.inputpurs" ]
   tested <- for paths runSnapshot
   pure $ groupSnapshots tested
   where

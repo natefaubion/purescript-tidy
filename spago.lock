@@ -35,11 +35,11 @@ workspace:
         - posix-types
         - prelude
         - strings
-        - tidy-cli
         - transformers
         - tuples
       test_dependencies:
         - spec
+        - tidy-cli
       build_plan:
         - aff
         - ansi
