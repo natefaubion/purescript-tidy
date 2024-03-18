@@ -236,10 +236,9 @@ workspace:
         - node-fs
         - node-path
         - node-process
+        - numbers
         - prelude
         - strings
-        - sunde
-        - unsafe-coerce
       test_dependencies: []
       build_plan:
         - aff
@@ -301,7 +300,6 @@ workspace:
         - safe-coerce
         - st
         - strings
-        - sunde
         - tailrec
         - transformers
         - tuples
@@ -806,9 +804,6 @@ workspace:
     node-workerbees:
       git: https://github.com/srghma/purescript-node-workerbees.git
       ref: node-esm
-    sunde:
-      git: https://github.com/srhhma/purescript-sunde.git
-      ref: master
 packages:
   aff:
     type: registry
@@ -1695,24 +1690,6 @@ packages:
       - tuples
       - unfoldable
       - unsafe-coerce
-  sunde:
-    type: git
-    url: https://github.com/srhhma/purescript-sunde.git
-    rev: 8a17390164e1e4624dfba14cf3865b826c932ac4
-    dependencies:
-      - aff
-      - arrays
-      - either
-      - foldable-traversable
-      - maybe
-      - node-buffer
-      - node-child-process
-      - node-event-emitter
-      - node-os
-      - node-streams
-      - posix-types
-      - prelude
-      - refs
   tailrec:
     type: registry
     version: 6.1.0
