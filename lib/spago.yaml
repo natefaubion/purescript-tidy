@@ -1,40 +1,24 @@
 package:
   name: tidy
   dependencies:
-  - aff
-  - ansi
-  - argonaut-codecs
-  - argonaut-core
-  - argparse-basic
-  - arrays
-  - bifunctors
-  - console
-  - control
-  - datetime
-  - dodo-printer
-  - effect
-  - either
-  - exceptions
-  - foldable-traversable
-  - foreign-object
-  - language-cst-parser
-  - lazy
-  - lists
-  - maybe
-  - newtype
-  - node-buffer
-  - node-child-process
-  - node-glob-basic
-  - node-path
-  - node-process
-  - node-workerbees
-  - ordered-collections
-  - partial
-  - posix-types
-  - prelude
-  - strings
-  - transformers
-  - tuples
+    - argonaut-codecs
+    - argonaut-core
+    - argparse-basic
+    - arrays
+    - control
+    - dodo-printer
+    - either
+    - foldable-traversable
+    - language-cst-parser
+    - lists
+    - maybe
+    - newtype
+    - ordered-collections
+    - partial
+    - prelude
+    - strings
+    - transformers
+    - tuples
   test:
     main: Test.Main
     # execArgs:
@@ -45,7 +29,19 @@ package:
     #   - "--exclude-files"
     #   - "lib/test/snapshots/*" # doesnt work
     dependencies:
-      - spec
+      - aff
+      - ansi
+      - bifunctors
+      - console
+      - effect
+      - exceptions
+      - node-buffer
+      - node-child-process
+      - node-fs
+      - node-glob-basic
+      - node-path
+      - node-process
+      - posix-types
       # - tidy-cli
 publish:
   exclude:

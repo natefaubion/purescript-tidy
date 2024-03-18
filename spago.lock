@@ -3,42 +3,38 @@ workspace:
     tidy:
       path: lib
       dependencies:
-        - aff
-        - ansi
         - argonaut-codecs
         - argonaut-core
         - argparse-basic
         - arrays
-        - bifunctors
-        - console
         - control
-        - datetime
         - dodo-printer
-        - effect
         - either
-        - exceptions
         - foldable-traversable
-        - foreign-object
         - language-cst-parser
-        - lazy
         - lists
         - maybe
         - newtype
-        - node-buffer
-        - node-child-process
-        - node-glob-basic
-        - node-path
-        - node-process
-        - node-workerbees
         - ordered-collections
         - partial
-        - posix-types
         - prelude
         - strings
         - transformers
         - tuples
       test_dependencies:
-        - spec
+        - aff
+        - ansi
+        - bifunctors
+        - console
+        - effect
+        - exceptions
+        - node-buffer
+        - node-child-process
+        - node-fs
+        - node-glob-basic
+        - node-path
+        - node-process
+        - posix-types
       build_plan:
         - aff
         - ansi
@@ -47,7 +43,6 @@ workspace:
         - argparse-basic
         - arraybuffer-types
         - arrays
-        - avar
         - bifunctors
         - catenable-lists
         - console
@@ -65,7 +60,6 @@ workspace:
         - foldable-traversable
         - foreign
         - foreign-object
-        - fork
         - free
         - functions
         - functors
@@ -78,7 +72,6 @@ workspace:
         - lazy
         - lists
         - maybe
-        - mmorph
         - newtype
         - node-buffer
         - node-child-process
@@ -89,7 +82,6 @@ workspace:
         - node-path
         - node-process
         - node-streams
-        - node-workerbees
         - nonempty
         - now
         - nullable
@@ -98,14 +90,12 @@ workspace:
         - orders
         - parallel
         - partial
-        - pipes
         - posix-types
         - prelude
         - profunctor
         - record
         - refs
         - safe-coerce
-        - spec
         - st
         - strings
         - tailrec
@@ -115,7 +105,6 @@ workspace:
         - typelevel-prelude
         - unfoldable
         - unsafe-coerce
-        - variant
     tidy-cli:
       path: bin
       dependencies:
@@ -149,7 +138,6 @@ workspace:
         - parallel
         - partial
         - prelude
-        - refs
         - strings
         - tidy
         - transformers
@@ -181,7 +169,6 @@ workspace:
         - foldable-traversable
         - foreign
         - foreign-object
-        - fork
         - free
         - functions
         - functors
@@ -194,7 +181,6 @@ workspace:
         - lazy
         - lists
         - maybe
-        - mmorph
         - newtype
         - node-buffer
         - node-child-process
@@ -214,14 +200,12 @@ workspace:
         - orders
         - parallel
         - partial
-        - pipes
         - posix-types
         - prelude
         - profunctor
         - record
         - refs
         - safe-coerce
-        - spec
         - st
         - strings
         - tailrec
@@ -236,22 +220,31 @@ workspace:
     tidy-script:
       path: script
       dependencies:
+        - aff
+        - argonaut-codecs
+        - argonaut-core
         - arrays
         - console
         - effect
+        - either
         - exceptions
+        - foreign-object
         - maybe
         - node-buffer
         - node-child-process
+        - node-execa
         - node-fs
         - node-path
         - node-process
         - prelude
         - strings
+        - sunde
         - unsafe-coerce
       test_dependencies: []
       build_plan:
         - aff
+        - argonaut-codecs
+        - argonaut-core
         - arraybuffer-types
         - arrays
         - bifunctors
@@ -276,6 +269,7 @@ workspace:
         - integers
         - invariant
         - js-date
+        - js-timers
         - lazy
         - lists
         - maybe
@@ -283,7 +277,9 @@ workspace:
         - node-buffer
         - node-child-process
         - node-event-emitter
+        - node-execa
         - node-fs
+        - node-human-signals
         - node-os
         - node-path
         - node-process
@@ -295,21 +291,26 @@ workspace:
         - ordered-collections
         - orders
         - parallel
+        - parsing
         - partial
         - posix-types
         - prelude
         - profunctor
+        - record
         - refs
         - safe-coerce
         - st
         - strings
+        - sunde
         - tailrec
         - transformers
         - tuples
         - type-equality
         - typelevel-prelude
         - unfoldable
+        - unicode
         - unsafe-coerce
+        - unsafe-reference
   package_set:
     address:
       registry: 50.4.0
@@ -805,6 +806,9 @@ workspace:
     node-workerbees:
       git: https://github.com/srghma/purescript-node-workerbees.git
       ref: node-esm
+    sunde:
+      git: https://github.com/srhhma/purescript-sunde.git
+      ref: master
 packages:
   aff:
     type: registry
@@ -1117,12 +1121,6 @@ packages:
       - tuples
       - typelevel-prelude
       - unfoldable
-  fork:
-    type: registry
-    version: 6.0.0
-    integrity: sha256-X7u0SuCvFbLbzuNEKLBNuWjmcroqMqit4xEzpQwAP7E=
-    dependencies:
-      - aff
   free:
     type: registry
     version: 7.1.0
@@ -1216,6 +1214,12 @@ packages:
       - foreign
       - integers
       - now
+  js-timers:
+    type: registry
+    version: 6.1.0
+    integrity: sha256-znHWLSSOYw15P5DTcsAdal2lf7nGA2yayLdOZ2t5r7o=
+    dependencies:
+      - effect
   language-cst-parser:
     type: git
     url: https://github.com/srghma/purescript-language-cst-parser.git
@@ -1286,14 +1290,6 @@ packages:
       - invariant
       - newtype
       - prelude
-  mmorph:
-    type: registry
-    version: 7.0.0
-    integrity: sha256-urZlZNNqGeQFe5D/ClHlR8QgGBNHTMFPtJ5S5IpflTQ=
-    dependencies:
-      - free
-      - functors
-      - transformers
   newtype:
     type: registry
     version: 5.0.0
@@ -1340,6 +1336,49 @@ packages:
       - nullable
       - prelude
       - unsafe-coerce
+  node-execa:
+    type: registry
+    version: 5.0.0
+    integrity: sha256-yNcgbCs4guwoTApyV6LRoYCYnU5loWgQiqMtsbloZqk=
+    dependencies:
+      - aff
+      - arrays
+      - control
+      - effect
+      - either
+      - exceptions
+      - foldable-traversable
+      - foreign
+      - foreign-object
+      - functions
+      - integers
+      - js-timers
+      - maybe
+      - node-buffer
+      - node-child-process
+      - node-event-emitter
+      - node-fs
+      - node-human-signals
+      - node-os
+      - node-path
+      - node-process
+      - node-streams
+      - nullable
+      - numbers
+      - ordered-collections
+      - parallel
+      - parsing
+      - partial
+      - posix-types
+      - prelude
+      - record
+      - refs
+      - safe-coerce
+      - strings
+      - tailrec
+      - tuples
+      - unsafe-coerce
+      - unsafe-reference
   node-fs:
     type: registry
     version: 9.1.0
@@ -1382,6 +1421,17 @@ packages:
       - refs
       - strings
       - tuples
+  node-human-signals:
+    type: registry
+    version: 1.0.0
+    integrity: sha256-HOUfMQTAIuL5AOCUlJJcKq78masah+388eQOdloYH1g=
+    dependencies:
+      - arrays
+      - control
+      - foreign-object
+      - maybe
+      - ordered-collections
+      - prelude
   node-os:
     type: registry
     version: 5.1.0
@@ -1534,23 +1584,41 @@ packages:
       - profunctor
       - refs
       - transformers
+  parsing:
+    type: registry
+    version: 10.2.0
+    integrity: sha256-ZDIdMFAKkst57x6BVa1aUWJnS8smoZnXsZ339Aq1mPA=
+    dependencies:
+      - arrays
+      - control
+      - effect
+      - either
+      - enums
+      - foldable-traversable
+      - functions
+      - identity
+      - integers
+      - lazy
+      - lists
+      - maybe
+      - newtype
+      - nullable
+      - numbers
+      - partial
+      - prelude
+      - st
+      - strings
+      - tailrec
+      - transformers
+      - tuples
+      - unfoldable
+      - unicode
+      - unsafe-coerce
   partial:
     type: registry
     version: 4.0.0
     integrity: sha256-fwXerld6Xw1VkReh8yeQsdtLVrjfGiVuC5bA1Wyo/J4=
     dependencies: []
-  pipes:
-    type: registry
-    version: 8.0.0
-    integrity: sha256-kvfqGM4cPA/wCcBHbp5psouFw5dZGvku2462x7ZBwSY=
-    dependencies:
-      - aff
-      - lists
-      - mmorph
-      - prelude
-      - tailrec
-      - transformers
-      - tuples
   posix-types:
     type: registry
     version: 6.0.0
@@ -1597,38 +1665,6 @@ packages:
     integrity: sha256-a1ibQkiUcbODbLE/WAq7Ttbbh9ex+x33VCQ7GngKudU=
     dependencies:
       - unsafe-coerce
-  spec:
-    type: registry
-    version: 7.6.0
-    integrity: sha256-+merGdQbL9zWONbnt8S8J9afGJ59MQqGtS0qSd3yu4I=
-    dependencies:
-      - aff
-      - ansi
-      - arrays
-      - avar
-      - bifunctors
-      - control
-      - datetime
-      - effect
-      - either
-      - exceptions
-      - foldable-traversable
-      - fork
-      - identity
-      - integers
-      - lists
-      - maybe
-      - newtype
-      - now
-      - ordered-collections
-      - parallel
-      - pipes
-      - prelude
-      - refs
-      - strings
-      - tailrec
-      - transformers
-      - tuples
   st:
     type: registry
     version: 6.2.0
@@ -1659,6 +1695,24 @@ packages:
       - tuples
       - unfoldable
       - unsafe-coerce
+  sunde:
+    type: git
+    url: https://github.com/srhhma/purescript-sunde.git
+    rev: 8a17390164e1e4624dfba14cf3865b826c932ac4
+    dependencies:
+      - aff
+      - arrays
+      - either
+      - foldable-traversable
+      - maybe
+      - node-buffer
+      - node-child-process
+      - node-event-emitter
+      - node-os
+      - node-streams
+      - posix-types
+      - prelude
+      - refs
   tailrec:
     type: registry
     version: 6.1.0
@@ -1721,11 +1775,25 @@ packages:
       - partial
       - prelude
       - tuples
+  unicode:
+    type: registry
+    version: 6.0.0
+    integrity: sha256-QJnTVZpmihEAUiMeYrfkusVoziJWp2hJsgi9bMQLue8=
+    dependencies:
+      - foldable-traversable
+      - maybe
+      - strings
   unsafe-coerce:
     type: registry
     version: 6.0.0
     integrity: sha256-IqIYW4Vkevn8sI+6aUwRGvd87tVL36BBeOr0cGAE7t0=
     dependencies: []
+  unsafe-reference:
+    type: registry
+    version: 5.0.0
+    integrity: sha256-zU7BhfJU14nXQRZG9iADsp0mSiKhz07OcKyjRB2YT+Y=
+    dependencies:
+      - prelude
   variant:
     type: registry
     version: 8.0.0

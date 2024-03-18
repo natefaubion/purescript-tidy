@@ -69,3 +69,7 @@ workspace:
       # git: https://github.com/natefaubion/purescript-tidy.git
       git: https://github.com/srghma/purescript-dodo-printer.git
       ref: master
+    sunde:
+      # git: https://github.com/justinwoo/purescript-sunde.git
+      git: https://github.com/srhhma/purescript-sunde.git
+      ref: master
