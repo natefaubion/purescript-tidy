@@ -56,7 +56,8 @@ main = runAff_ (either throwException mempty) do
 
   liftEffect $ Console.log $ "running 'spago install " <> Str.joinWith " " packages <> "'"
   _ <- liftEffect $ Exec.execSync' ("spago install " <> Str.joinWith " " packages) (_ { cwd = Just tmpPath })
-  pursFiles <- getPursFiles 0 (tmpPath <> "/.spago")
+
+  pursFiles <- getPursFiles tmpPath
 
   let genCmdFile = Path.concat [ cwdPath, "cli", "index.js" ]
   let genCmdArgs = [ "generate-operators" ] <> pursFiles
@@ -107,22 +108,12 @@ main = runAff_ (either throwException mempty) do
 
   writeTextFile UTF8 (Path.concat [ cwdPath, "lib", "src", "Tidy", "Operators", "Defaults.purs" ]) contents
 
--- copied from purescript-language-cst-parser/parse-package-set/src/Main.purs
-getPursFiles :: Int -> FilePath -> Aff (Array FilePath)
-getPursFiles depth root = do
-  readdir root >>= foldMap \file -> do
-    let path = root <> "/" <> file
-    stats <- stat path
-    if FS.isDirectory stats then
-      if depth == 2 && file /= "src" then do
-        pure []
-      else
-        getPursFiles (depth + 1) path
-    else if Regex.test pursRegex path then
-      pure [ path ]
-    else pure []
-  where
-  pursRegex = unsafeRegex "\\.purs$" noFlags
+getPursFiles :: FilePath -> Aff (Array FilePath)
+getPursFiles tmpPath = do
+  s <- liftEffect $ Buffer.toString UTF8 =<< Exec.execSync' ("spago sources --json --quiet") (_ { cwd = Just tmpPath })
+  case Data.Argonaut.Decode.decodeJson =<< Data.Argonaut.Decode.parseJson s of
+    Left err -> throwError $ error $ Data.Argonaut.Decode.printJsonDecodeError err
+    Right globs -> pure globs
 
 defaultPackageJson :: String
 defaultPackageJson =
