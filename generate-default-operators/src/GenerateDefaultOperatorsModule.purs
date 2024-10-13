@@ -44,21 +44,25 @@ main = runAff_ (either throwException mempty) do
 
   writeTextFile UTF8 (Path.concat [ tmpPath, "spago.yaml" ]) defaultSpagoYaml
   writeTextFile UTF8 (Path.concat [ tmpPath, "package.json" ]) defaultPackageJson
+  liftEffect $ Console.log $ "running 'npm install'"
   _ <- liftEffect $ ChildProcess.execSync' "npm install" (_ { cwd = Just tmpPath })
 
+  liftEffect $ Console.log $ "running 'spago ls packages --json'"
   s <- liftEffect $ Buffer.toString UTF8 =<< Exec.execSync' "spago ls packages --json" (_ { cwd = Just tmpPath })
 
   packages <- case Data.Argonaut.Decode.decodeJson =<< Data.Argonaut.Decode.parseJson s of
     Left err -> throwError $ error $ Data.Argonaut.Decode.printJsonDecodeError err
     Right (object :: Object Json) -> pure $ Foreign.Object.keys object
 
+  liftEffect $ Console.log $ "running 'spago install " <> Str.joinWith " " packages <> "'"
   _ <- liftEffect $ Exec.execSync' ("spago install " <> Str.joinWith " " packages) (_ { cwd = Just tmpPath })
   pursFiles <- getPursFiles 0 (tmpPath <> "/.spago")
 
-  let genCmdFile = Path.concat [ cwdPath, "bin", "index.js" ]
+  let genCmdFile = Path.concat [ cwdPath, "cli", "index.js" ]
   let genCmdArgs = [ "generate-operators" ] <> pursFiles
 
-  -- liftEffect $ Console.log $ "Using command " <> Str.joinWith " " ([ genCmdFile ] <> genCmdArgs) <> "\n"
+  liftEffect $ Console.log $ "running " <> Str.joinWith " " ([ genCmdFile, "..."]) <> "\n"
+  -- liftEffect $ Console.log $ "running " <> Str.joinWith " " ([ genCmdFile ] <> genCmdArgs) <> "\n"
 
   genCmdResult <- liftEffect $ Node.Library.Execa.execaSync genCmdFile genCmdArgs
     ( _
@@ -140,6 +144,6 @@ defaultSpagoYaml = Array.intercalate "\n"
   , "  dependencies: []"
   , "workspace:"
   , "  package_set:"
-  , "    registry: 50.4.0"
+  , "    registry: 60.5.1"
   , "  extra_packages: {}"
   ]

@@ -25,7 +25,9 @@
     "bundle:cli:worker": "purs-backend-es bundle-app --platform node --to \"./bundle/Cli.Worker/index.js\" --main Cli.Worker --no-build",
     "test": "npm run test:lib",
     "test:lib": "spago test --package tidy --censor-stats --strict --pedantic-packages",
-    "run:generate-default-operators": "spago run --package tidy-generate-default-operators --main GenerateDefaultOperatorsModule",
+    "generate-default-operators:update_registry": "registry_value=$(awk '/registry:/ {print $2}' spago.yaml) && echo \"registry_value=\" $registry_value && sed -i \"s/registry:.*/registry: $registry_value\\\"/\" generate-default-operators/src/GenerateDefaultOperatorsModule.purs",
+    "generate-default-operators:run": "spago run --package tidy-generate-default-operators --main GenerateDefaultOperatorsModule",
+    "generate-default-operators": "npm run generate-default-operators:update_registry && npm run generate-default-operators:run",
     "format-self": "npm run build && node ./cli/index.js format-in-place lib bin generate-default-operators",
     "check-self": "node ./cli/index.js check lib bin generate-default-operators",
     "prepublishOnly": "rm -rf output bundle && npm run bundle:cli"
