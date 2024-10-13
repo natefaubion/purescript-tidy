@@ -1,4 +1,4 @@
-module Bin.Timing where
+module Cli.Timing where
 
 import Prelude
 

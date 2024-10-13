@@ -1,67 +1,16 @@
 workspace:
   packageSet:
-    registry: 58.0.0
+    registry: 60.5.1
   extraPackages:
     language-cst-parser:
-      # dependencies:
-      # - arrays
-      # - const
-      # - control
-      # - either
-      # - foldable-traversable
-      # - free
-      # - functions
-      # - functors
-      # - identity
-      # - integers
-      # - lazy
-      # - lists
-      # - maybe
-      # - newtype
-      # - numbers
-      # - ordered-collections
-      # - partial
-      # - prelude
-      # - st
-      # - strings
-      # - transformers
-      # - tuples
-      # - typelevel-prelude
-      # - unfoldable
-      # - unsafe-coerce
       # git: https://github.com/natefaubion/purescript-language-cst-parser.git
       git: https://github.com/srghma/purescript-language-cst-parser.git
       subdir: lib
-      # ref: v0.14.0
       ref: main
     node-glob-basic:
-      # dependencies:
-      # - aff
-      # - console
-      # - effect
-      # - lists
-      # - maybe
-      # - node-fs-aff
-      # - node-path
-      # - node-process
-      # - ordered-collections
-      # - strings
       git: https://github.com/natefaubion/purescript-node-glob-basic.git
       ref: main
-      # ref: v1.2.2
     node-workerbees:
-      # dependencies:
-      # - aff
-      # - argonaut-core
-      # - arraybuffer-types
-      # - avar
-      # - effect
-      # - either
-      # - exceptions
-      # - maybe
-      # - newtype
-      # - parallel
-      # - variant
       # git: https://github.com/natefaubion/purescript-node-workerbees.git
       git: https://github.com/srghma/purescript-node-workerbees.git
       ref: node-esm

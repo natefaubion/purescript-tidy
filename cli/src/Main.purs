@@ -4,8 +4,8 @@ import Prelude
 
 import ArgParse.Basic (ArgParser)
 import ArgParse.Basic as Arg
-import Bin.Version (version)
-import Bin.Worker (WorkerData, WorkerInput, WorkerOutput, formatCommand, formatInPlaceCommand, toWorkerConfig)
+import Cli.Version (version)
+import Cli.Worker (WorkerData, WorkerInput, WorkerOutput, formatCommand, formatInPlaceCommand, toWorkerConfig)
 import Control.Monad.State (evalStateT, lift)
 import Control.Monad.State as State
 import Control.Parallel (parTraverse)
@@ -212,9 +212,9 @@ main = launchAff_ do
           results <-
             if Array.length filesWithOptions > numThreads * 2 then do
               -- Worker location for production bin
-              let bundleLocation = Path.concat [ srcLocation, "bundle", "Bin.Worker", "index.js" ]
+              let bundleLocation = Path.concat [ srcLocation, "bundle", "Cli.Worker", "index.js" ]
               -- Worker location for local dev
-              let outputLocation = Path.concat [ srcLocation, "output", "Bin.Worker", "index.js" ]
+              let outputLocation = Path.concat [ srcLocation, "output", "Cli.Worker", "index.js" ]
               worker <-
                 oneOf
                   [ FS.stat bundleLocation $> Worker.unsafeWorkerFromPath bundleLocation

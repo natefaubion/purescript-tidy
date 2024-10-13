@@ -1,52 +1,43 @@
 package:
-  name: tidy
+  name: tidy-cli
   publish:
     license: MIT
     version: 0.11.0
     location:
       githubOwner: natefaubion
       githubRepo: purescript-tidy
-    exclude:
-      - "test/snapshots/**/*"
   dependencies:
+    - aff: ">=8.0.0 <9.0.0"
     - argonaut-codecs: ">=9.1.0 <10.0.0"
     - argonaut-core: ">=7.0.0 <8.0.0"
     - argparse-basic: ">=2.0.0 <3.0.0"
     - arrays: ">=7.3.0 <8.0.0"
+    - console: ">=6.1.0 <7.0.0"
     - control: ">=6.0.0 <7.0.0"
+    - datetime: ">=6.1.0 <7.0.0"
     - dodo-printer: "*"
+    - effect: ">=4.0.0 <5.0.0"
     - either: ">=6.1.0 <7.0.0"
     - foldable-traversable: ">=6.0.0 <7.0.0"
+    - foreign-object: ">=4.1.0 <5.0.0"
     - language-cst-parser: "*"
+    - lazy: ">=6.0.0 <7.0.0"
     - lists: ">=7.0.0 <8.0.0"
     - maybe: ">=6.0.0 <7.0.0"
     - newtype: ">=5.0.0 <6.0.0"
+    - node-buffer: ">=9.0.0 <10.0.0"
+    - node-fs: ">=9.2.0 <10.0.0"
+    - node-glob-basic: "*"
+    - node-path: ">=5.0.0 <6.0.0"
+    - node-process: ">=11.2.0 <12.0.0"
+    - node-streams: ">=9.0.0 <10.0.0"
+    - node-workerbees: "*"
+    - numbers: ">=9.0.1 <10.0.0"
     - ordered-collections: ">=3.2.0 <4.0.0"
+    - parallel: ">=7.0.0 <8.0.0"
     - partial: ">=4.0.0 <5.0.0"
     - prelude: ">=6.0.1 <7.0.0"
     - strings: ">=6.0.1 <7.0.0"
+    - tidy: "*"
     - transformers: ">=6.1.0 <7.0.0"
     - tuples: ">=7.0.0 <8.0.0"
-  test:
-    main: Test.Main
-    # execArgs:
-    #   - "--exclude-files"
-    #   - "snapshots/*" # doesnt work
-    #   - "--exclude-files"
-    #   - "test/snapshots/*" # doesnt work
-    #   - "--exclude-files"
-    #   - "lib/test/snapshots/*" # doesnt work, so I have renamed purs files to inputpurs
-    dependencies:
-      - aff
-      - ansi
-      - bifunctors
-      - console
-      - effect
-      - exceptions
-      - node-buffer
-      - node-child-process
-      - node-fs
-      - node-glob-basic
-      - node-path
-      - node-process
-      - posix-types

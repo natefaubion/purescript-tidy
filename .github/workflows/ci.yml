@@ -10,41 +10,47 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-      # - uses: purescript-contrib/setup-purescript@main
-      - uses: srghma/setup-purescript@main
+      - uses: actions/checkout@v4
+
+      - name: Set up a PureScript toolchain
+        uses: purescript-contrib/setup-purescript@main
         with:
           purescript: "latest"
-          spago: "latest"
-      - uses: actions/cache@v2
-        # This cache uses the .dhall files to know when it should reinstall
-        # and rebuild packages. It caches both the installed packages from
-        # the `.spago` directory and compilation artifacts from the `output`
-        # directory. When restored the compiler will rebuild any files that
-        # have changed.
+          purs-tidy: "latest"
+          spago: "unstable"
+
+      - name: Cache PureScript dependencies
+        uses: actions/cache@v4
         with:
-          key: ${{ runner.os }}-spago-${{ hashFiles('**/*.dhall') }}
+          key: ${{ runner.os }}-spago-${{ hashFiles('**/spago.lock') }}
           path: |
             .spago
             output
 
-      - name: Install esbuild and dev dependencies
-        run: npm install --global esbuild@0.14.x && npm install
+      - name: Cache NPM dependencies
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-node-modules
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/package-lock.json') }}-
+            ${{ runner.os }}-build-${{ env.cache-name }}-
+            ${{ runner.os }}-build-
+            ${{ runner.os }}-
 
-      - name: Build source
-        run: npm run bundle
+      - name: Install npm dependencies
+        run: npm install
 
-      - name: Build script
-        run: spago --config script/spago.dhall build
+      - name: Build all
+        run: npm run build
 
-      - name: Build bin
-        run: spago --config bin/spago.dhall build
+      - name: Build cli
+        run: npm run bundle:cli
 
-      - name: Build tests
-        run: spago --config test/spago.dhall build
-
-      - name: Run tests
-        run: spago --quiet --config test/spago.dhall test
+      - name: Run all tests
+        run: npm run test
 
       - name: Verify formatting
         run: npm run check-self

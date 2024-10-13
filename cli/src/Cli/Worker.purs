@@ -1,8 +1,8 @@
-module Bin.Worker where
+module Cli.Worker where
 
 import Prelude
 
-import Bin.Timing (hrtime, hrtimeDiff, toMilliseconds)
+import Cli.Timing (hrtime, hrtimeDiff, toMilliseconds)
 import Data.Array.NonEmpty as NonEmptyArray
 import Data.Either (Either(..), either, fromRight')
 import Data.Lazy (Lazy)
