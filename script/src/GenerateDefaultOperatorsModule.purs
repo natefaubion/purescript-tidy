@@ -29,7 +29,7 @@ main = do
   let opts = _ { cwd = Just tmpPath }
   let genCmd = Path.concat [ cwdPath, "bin", "index.js" ] <> " generate-operators '.spago/*/*/src/**/*.purs'"
 
-  writeTextFile UTF8 (Path.concat [ tmpPath, "spago.dhall" ]) defaultSpagoDhall
+  writeTextFile UTF8 (Path.concat [ tmpPath, "spago.yaml" ]) defaultSpagoYaml
   writeTextFile UTF8 (Path.concat [ tmpPath, "package.json" ]) defaultPackageJson
   _ <- ChildProcess.execSync' "npm install" opts
   output <- Buffer.toString UTF8 =<< catchException
@@ -76,8 +76,8 @@ defaultPackageJson =
     "private": true,
     "type": "module",
     "dependencies": {
-      "purescript": "^0.15.0",
-      "spago": "^0.20.8"
+      "purescript": "^0.15.15",
+      "spago": "next"
     },
     "scripts": {
       "postinstall": "spago install"
@@ -85,115 +85,115 @@ defaultPackageJson =
   }
   """
 
-defaultSpagoDhall :: String
-defaultSpagoDhall =
+defaultSpagoYaml :: String
+defaultSpagoYaml =
   """
-  { name = "purs-tidy-generate-default-operators"
-  , dependencies =
-    [ "ace"
-    , "aff"
-    , "aff-bus"
-    , "aff-coroutines"
-    , "affjax"
-    , "argonaut"
-    , "argonaut-codecs"
-    , "argonaut-core"
-    , "argonaut-generic"
-    , "argonaut-traversals"
-    , "arraybuffer-types"
-    , "arrays"
-    , "assert"
-    , "avar"
-    , "bifunctors"
-    , "catenable-lists"
-    , "concurrent-queues"
-    , "console"
-    , "const"
-    , "contravariant"
-    , "control"
-    , "coroutines"
-    , "datetime"
-    , "distributive"
-    , "effect"
-    , "either"
-    , "enums"
-    , "exceptions"
-    , "exists"
-    , "filterable"
-    , "fixed-points"
-    , "foldable-traversable"
-    , "foreign"
-    , "foreign-object"
-    , "fork"
-    , "form-urlencoded"
-    , "formatters"
-    , "free"
-    , "freet"
-    , "functions"
-    , "functors"
-    , "gen"
-    , "github-actions-toolkit"
-    , "graphs"
-    , "http-methods"
-    , "identity"
-    , "integers"
-    , "invariant"
-    , "js-date"
-    , "js-timers"
-    , "js-uri"
-    , "lazy"
-    , "lcg"
-    , "lists"
-    , "machines"
-    , "matryoshka"
-    , "maybe"
-    , "media-types"
-    , "minibench"
-    , "newtype"
-    , "nonempty"
-    , "now"
-    , "nullable"
-    , "numbers"
-    , "options"
-    , "ordered-collections"
-    , "orders"
-    , "parallel"
-    , "parsing"
-    , "partial"
-    , "pathy"
-    , "precise"
-    , "prelude"
-    , "profunctor"
-    , "profunctor-lenses"
-    , "psci-support"
-    , "quickcheck"
-    , "quickcheck-laws"
-    , "random"
-    , "react"
-    , "react-dom"
-    , "record"
-    , "refs"
-    , "routing"
-    , "safe-coerce"
-    , "semirings"
-    , "st"
-    , "string-parsers"
-    , "strings"
-    , "strings-extra"
-    , "tailrec"
-    , "these"
-    , "transformers"
-    , "tuples"
-    , "type-equality"
-    , "typelevel-prelude"
-    , "unfoldable"
-    , "unicode"
-    , "unsafe-coerce"
-    , "unsafe-reference"
-    , "uri"
-    , "validation"
-    ]
-  , packages = https://github.com/purescript/package-sets/releases/download/psc-0.15.0-20220513/packages.dhall
-  , sources = [] : List Text
-  }
+  package:
+    name: tidy-generate-default-operators
+    dependencies:
+      - ace
+      - aff
+      - aff-bus
+      - aff-coroutines
+      - affjax
+      - argonaut
+      - argonaut-codecs
+      - argonaut-core
+      - argonaut-generic
+      - argonaut-traversals
+      - arraybuffer-types
+      - arrays
+      - assert
+      - avar
+      - bifunctors
+      - catenable-lists
+      - concurrent-queues
+      - console
+      - const
+      - contravariant
+      - control
+      - coroutines
+      - datetime
+      - distributive
+      - effect
+      - either
+      - enums
+      - exceptions
+      - exists
+      - filterable
+      - fixed-points
+      - foldable-traversable
+      - foreign
+      - foreign-object
+      - fork
+      - form-urlencoded
+      - formatters
+      - free
+      - freet
+      - functions
+      - functors
+      - gen
+      - graphs
+      - http-methods
+      - identity
+      - integers
+      - invariant
+      - js-date
+      - js-timers
+      - js-uri
+      - lazy
+      - lcg
+      - lists
+      - machines
+      - matryoshka
+      - maybe
+      - media-types
+      - minibench
+      - newtype
+      - nonempty
+      - now
+      - nullable
+      - numbers
+      - options
+      - ordered-collections
+      - orders
+      - parallel
+      - parsing
+      - partial
+      - pathy
+      - precise
+      - prelude
+      - profunctor
+      - profunctor-lenses
+      - psci-support
+      - quickcheck
+      - quickcheck-laws
+      - random
+      - react
+      - react-dom
+      - record
+      - refs
+      - routing
+      - safe-coerce
+      - semirings
+      - st
+      - string-parsers
+      - strings
+      - strings-extra
+      - tailrec
+      - these
+      - transformers
+      - tuples
+      - type-equality
+      - typelevel-prelude
+      - unfoldable
+      - unicode
+      - unsafe-coerce
+      - unsafe-reference
+      - uri
+      - validation
+  workspace:
+    packageSet:
+      registry: 63.1.2
+    extraPackages: {}
 """
