@@ -162,7 +162,13 @@ main = launchAff_ do
   case parsedCmd of
     Left err -> do
       Console.error $ Arg.printArgError err
-      liftEffect $ Process.setExitCode 1
+      case err of
+        Arg.ArgError _ Arg.ShowHelp ->
+          pure unit
+        Arg.ArgError _ (Arg.ShowInfo _) ->
+          pure unit
+        _ ->
+          liftEffect $ Process.setExitCode 1
     Right cmd ->
       case cmd of
         GenerateOperators globs ->
