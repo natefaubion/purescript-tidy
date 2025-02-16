@@ -11,3 +11,4 @@
 /.psa*
 /.spago
 /*.purs*
+/.vscode

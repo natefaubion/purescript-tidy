@@ -16,15 +16,14 @@
   "scripts": {
     "version": "echo 'export const version = \"v'$npm_package_version'\";' > ./bin/Bin/Version.js && git add ./bin/Bin/Version.js",
     "postversion": "git push && git push --tags",
-    "build": "spago -x bin/spago.dhall build",
-    "build:corefn": "spago -x bin/spago.dhall build -u '-g corefn,js'",
-    "bundle": "npm run build:corefn && purs-backend-es build && npm run bundle:main && npm run bundle:worker",
-    "bundle:main": "purs-backend-es bundle-module --platform node --to \"./bundle/Main/index.js\" --no-build",
-    "bundle:worker": "purs-backend-es bundle-app --platform node --to \"./bundle/Bin.Worker/index.js\" --main Bin.Worker --no-build",
-    "test": "spago -x test/spago.dhall test",
-    "generate-default-operators": "spago -x script/spago.dhall run -m GenerateDefaultOperatorsModule",
-    "format-self": "npm run build && node ./bin/index.js format-in-place src 'test/*.purs' bin script",
-    "check-self": "node ./bin/index.js check src 'test/*.purs' bin script",
+    "build": "spago build --quiet",
+    "bundle": "npm run build && purs-backend-es build --int-tags && npm run bundle:main && npm run bundle:worker",
+    "bundle:main": "purs-backend-es bundle-module --platform node --to \"./bundle/Main/index.js\" --no-build --minify",
+    "bundle:worker": "purs-backend-es bundle-app --platform node --to \"./bundle/Bin.Worker/index.js\" --main Bin.Worker --no-build --minify",
+    "test": "spago test",
+    "generate-default-operators": "spago run -p tidy-script -m GenerateDefaultOperatorsModule",
+    "format-self": "npm run build && node ./bin/index.js format-in-place src bin script test-snapshots",
+    "check-self": "node ./bin/index.js check src 'test/*.purs' src bin script test-snapshots",
     "prepublishOnly": "rm -rf output bundle && npm run bundle"
   },
   "repository": {
@@ -43,6 +42,10 @@
   },
   "homepage": "https://github.com/natefaubion/purescript-tidy#readme",
   "devDependencies": {
-    "purs-backend-es": "^1.4.2"
+    "esbuild": "^0.25.0",
+    "purescript": "^0.15.15",
+    "purs-backend-es": "^1.4.2",
+    "purs-tidy": "^0.11.0",
+    "spago": "^0.93.42"
   }
 }

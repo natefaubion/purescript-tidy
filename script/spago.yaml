@@ -1,0 +1,18 @@
+package:
+  name: tidy-script
+  build:
+    strict: true
+  dependencies:
+    - arrays: ">=7.3.0 <8.0.0"
+    - console: ">=6.1.0 <7.0.0"
+    - effect: ">=4.0.0 <5.0.0"
+    - exceptions: ">=6.1.0 <7.0.0"
+    - maybe: ">=6.0.0 <7.0.0"
+    - node-buffer: ">=9.0.0 <10.0.0"
+    - node-child-process: ">=11.1.0 <12.0.0"
+    - node-fs: ">=9.2.0 <10.0.0"
+    - node-path: ">=5.0.1 <6.0.0"
+    - node-process: ">=11.2.0 <12.0.0"
+    - prelude: ">=6.0.1 <7.0.0"
+    - strings: ">=6.0.1 <7.0.0"
+    - unsafe-coerce: ">=6.0.0 <7.0.0"

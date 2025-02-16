@@ -34,7 +34,7 @@ import Data.Traversable (for, traverse)
 import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
-import Effect.Aff (Aff, error, launchAff_, makeAff, throwError, try)
+import Effect.Aff (Aff, effectCanceler, error, launchAff_, makeAff, throwError, try)
 import Effect.Aff as Aff
 import Effect.Class (liftEffect)
 import Effect.Class.Console as Console
@@ -43,6 +43,7 @@ import Foreign.Object (Object)
 import Foreign.Object as Object
 import Node.Buffer as Buffer
 import Node.Encoding (Encoding(..))
+import Node.EventEmitter (on)
 import Node.FS.Aff as FS
 import Node.FS.Stats as Stats
 import Node.Glob.Basic (expandGlobsCwd, expandGlobsWithStatsCwd)
@@ -160,14 +161,14 @@ main = launchAff_ do
 
   case parsedCmd of
     Left err -> do
-      Console.log $ Arg.printArgError err
+      Console.error $ Arg.printArgError err
       case err of
         Arg.ArgError _ Arg.ShowHelp ->
-          liftEffect $ Process.exit 0
+          pure unit
         Arg.ArgError _ (Arg.ShowInfo _) ->
-          liftEffect $ Process.exit 0
+          pure unit
         _ ->
-          liftEffect $ Process.exit 1
+          liftEffect $ Process.setExitCode 1
     Right cmd ->
       case cmd of
         GenerateOperators globs ->
@@ -180,7 +181,7 @@ main = launchAff_ do
             FS.writeTextFile UTF8 rcFileName $ contents <> "\n"
           else do
             Console.error $ rcFileName <> " already exists."
-            liftEffect $ Process.exit 1
+            liftEffect $ Process.setExitCode 1
 
         FormatInPlace mode cliOptions configOption numThreads printTiming globs -> do
           currentDir <- liftEffect Process.cwd
@@ -236,7 +237,7 @@ main = launchAff_ do
           when printTiming do
             for_ (Array.sortBy (comparing _.timing) results) \{ filePath, timing } ->
               when (timing > 0.0) do
-                Console.log $ fold
+                Console.error $ fold
                   [ Path.relative currentDir filePath
                   , " "
                   , NF.toStringWith (NF.fixed 2) timing
@@ -251,16 +252,16 @@ main = launchAff_ do
             Check -> liftEffect do
               if Array.null errors && Array.null notFormatted then do
                 Console.log "All files are formatted."
-                Process.exit 0
+                Process.setExitCode 0
               else do
                 unless (Array.null errors) do
-                  Console.log "Some files have errors:\n"
+                  Console.error "Some files have errors:\n"
                   for_ errors \(Tuple filePath error) ->
                     Console.error $ filePath <> ":\n  " <> error <> "\n"
                 unless (Array.null notFormatted) do
-                  Console.log "Some files are not formatted:\n"
+                  Console.error "Some files are not formatted:\n"
                   for_ notFormatted Console.error
-                Process.exit 1
+                Process.setExitCode 1
 
         Format cliOptions configOption -> do
           currentDir <- liftEffect Process.cwd
@@ -272,11 +273,9 @@ main = launchAff_ do
           case formatCommand options operators contents of
             Left err -> do
               Console.error err
-              liftEffect $ Process.exit 1
+              liftEffect $ Process.setExitCode 1
             Right str ->
-              makeAff \k -> do
-                _ <- Stream.writeString Process.stdout UTF8 str (const (k (Right unit)))
-                pure mempty
+              writeStdout str
 
 expandGlobs :: Array String -> Aff (Array String)
 expandGlobs = map dirToGlob >>> expandGlobsWithStatsCwd >>> map onlyFiles
@@ -303,7 +302,7 @@ getOptions cliOptions rcOptions filePath = case _ of
     case rcOptions of
       Nothing -> do
         Console.error $ rcFileName <> " not found for " <> filePath
-        liftEffect $ Process.exit 1
+        liftEffect $ Process.exit' 1
       Just options ->
         pure options
 
@@ -362,10 +361,15 @@ resolveRcForDir root = go List.Nil
 readStdin :: Aff String
 readStdin = makeAff \k -> do
   contents <- Ref.new []
-  Stream.onData Process.stdin \buff -> do
+  c1 <- Process.stdin # on Stream.dataH \buff ->
     void $ Ref.modify (_ `Array.snoc` buff) contents
-  Stream.onEnd Process.stdin do
+  c2 <- Process.stdin # on Stream.endH do
     k <<< Right =<< Buffer.toString UTF8 =<< Buffer.concat =<< Ref.read contents
+  pure $ effectCanceler (c1 *> c2)
+
+writeStdout :: String -> Aff Unit
+writeStdout str = makeAff \k -> do
+  _ <- Stream.writeString' Process.stdout UTF8 str (const (k (Right unit)))
   pure mempty
 
 generateOperatorsCommand :: Array String -> Aff Unit

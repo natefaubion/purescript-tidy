@@ -1,0 +1,35 @@
+package:
+  name: tidy
+  description: A syntax tidy-upper (formatter) for PureScript.
+  publish:
+    version: 0.11.1
+    license: MIT
+    location:
+      githubOwner: natefaubion
+      githubRepo: purescript-tidy
+  build:
+    strict: true
+  dependencies:
+    - arrays: ">=7.3.0 <8.0.0"
+    - control: ">=6.0.0 <7.0.0"
+    - dodo-printer: ">=2.2.3 <3.0.0"
+    - either: ">=6.1.0 <7.0.0"
+    - foldable-traversable: ">=6.0.0 <7.0.0"
+    - language-cst-parser: ">=0.14.1 <0.15.0"
+    - lists: ">=7.0.0 <8.0.0"
+    - maybe: ">=6.0.0 <7.0.0"
+    - newtype: ">=5.0.0 <6.0.0"
+    - ordered-collections: ">=3.2.0 <4.0.0"
+    - partial: ">=4.0.0 <5.0.0"
+    - prelude: ">=6.0.1 <7.0.0"
+    - strings: ">=6.0.1 <7.0.0"
+    - tuples: ">=7.0.0 <8.0.0"
+  test:
+    main: Test.Main
+    dependencies:
+      - argparse-basic
+      - node-fs
+      - node-glob-basic
+      - node-path
+      - tidy-bin: "*"
+workspace: {}
