@@ -28,8 +28,9 @@ import Effect.Exception (error)
 import Node.Buffer (Buffer, freeze)
 import Node.Buffer as Buffer
 import Node.Buffer.Immutable as ImmutableBuffer
-import Node.ChildProcess (ExecResult, defaultExecOptions)
+import Node.ChildProcess (ExecResult)
 import Node.ChildProcess as ChildProcess
+import Node.ChildProcess.Types (customShell)
 import Node.Encoding (Encoding(..))
 import Node.FS.Aff (readFile, writeFile)
 import Node.Glob.Basic (expandGlobs)
@@ -68,15 +69,24 @@ newtype SnapshotResultGroup = SnapshotResultGroup
   , hasBad :: Boolean
   }
 
+inputSuffix :: String
+inputSuffix = ".input"
+
+outputSuffix :: String
+outputSuffix = ".output"
+
+snapshotPath :: String
+snapshotPath = "test/snapshots"
+
 snapshotDirectory :: { path :: String, trimPath :: String -> String }
 snapshotDirectory =
-  { path: "./test/snapshots"
-  , trimPath: String.replace (Pattern "test/snapshots/") (Replacement "")
+  { path: "./" <> snapshotPath
+  , trimPath: String.replace (Pattern (snapshotPath <> "/")) (Replacement "")
   }
 
 snapshotFormat :: Boolean -> Maybe Pattern -> Aff SnapshotResultGroup
 snapshotFormat accept mbPattern = do
-  paths <- mapMaybe goPath <<< Array.fromFoldable <$> expandGlobs snapshotDirectory.path [ "**/*.purs" ]
+  paths <- mapMaybe goPath <<< Array.fromFoldable <$> expandGlobs snapshotDirectory.path [ "**/*" <> inputSuffix ]
   tested <- for paths runSnapshot
   pure $ groupSnapshots tested
   where
@@ -114,7 +124,7 @@ snapshotFormat accept mbPattern = do
   goPath path = do
     let
       splitPath = split (Pattern "/") path
-    name <- filterPath =<< stripSuffix (Pattern ".purs") =<< Array.last splitPath
+    name <- filterPath =<< stripSuffix (Pattern inputSuffix) =<< Array.last splitPath
     pure { path, name }
 
   filterPath = case mbPattern of
@@ -129,7 +139,7 @@ snapshotFormat accept mbPattern = do
 
   runSnapshot :: { path :: FilePath, name :: String } -> Aff (Tuple (Array String) SnapshotTest)
   runSnapshot { path, name } = flip catchError (map (Tuple testPath) <<< makeErrorResult name) do
-    let outputPath = String.replace (Pattern ".purs") (Replacement ".output") path
+    let outputPath = String.replace (Pattern inputSuffix) (Replacement outputSuffix) path
     contents <- liftEffect <<< bufferToUTF8 =<< readFile path
     case parseModule contents of
       ParseSucceeded mod ->
@@ -238,8 +248,8 @@ snapshotFormat accept mbPattern = do
 
 exec :: String -> Aff ExecResult
 exec command = makeAff \k -> do
-  childProc <- ChildProcess.exec command (defaultExecOptions { shell = Just "/bin/bash" }) (k <<< pure)
-  pure $ effectCanceler $ ChildProcess.kill SIGABRT childProc
+  childProc <- ChildProcess.exec' command (_ { shell = Just (customShell "/bin/bash") }) (k <<< pure)
+  pure $ effectCanceler $ void $ ChildProcess.killSignal SIGABRT childProc
 
 bufferToUTF8 :: Buffer -> Effect String
 bufferToUTF8 = map (ImmutableBuffer.toString UTF8) <<< freeze

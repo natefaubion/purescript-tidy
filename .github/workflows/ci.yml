@@ -10,39 +10,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
-      - uses: purescript-contrib/setup-purescript@main
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          purescript: "0.15.0"
-      - uses: actions/cache@v2
-        # This cache uses the .dhall files to know when it should reinstall
-        # and rebuild packages. It caches both the installed packages from
-        # the `.spago` directory and compilation artifacts from the `output`
-        # directory. When restored the compiler will rebuild any files that
-        # have changed.
+          node-version: 20
+          cache: 'npm'
+
+      - name: Cache PureScript dependencies
+        uses: actions/cache@v4
         with:
-          key: ${{ runner.os }}-spago-${{ hashFiles('**/*.dhall') }}
+          key: ${{ runner.os }}-spago-${{ hashFiles('**/spago.lock') }}
           path: |
             .spago
             output
 
-      - name: Install esbuild and dev dependencies
-        run: npm install --global esbuild@0.14.x && npm install
+      - name: Install npm dependencies
+        run: npm install
 
       - name: Build source
-        run: npm run bundle
-
-      - name: Build script
-        run: spago --config script/spago.dhall build
-
-      - name: Build bin
-        run: spago --config bin/spago.dhall build
-
-      - name: Build tests
-        run: spago --config test/spago.dhall build
+        run: npm run bundle -- --pedantic-packages
 
       - name: Run tests
-        run: spago --quiet --config test/spago.dhall test
+        run: npm run test -- --offline --quiet
 
       - name: Verify formatting
         run: npm run check-self

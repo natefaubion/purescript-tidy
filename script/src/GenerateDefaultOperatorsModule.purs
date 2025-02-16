@@ -26,12 +26,12 @@ main = do
   cwdPath <- cwd
   tmpPath <- tmpdir "purs-tidy-generate-default-operators-"
 
-  let opts = ChildProcess.defaultExecSyncOptions { cwd = Just tmpPath }
+  let opts = _ { cwd = Just tmpPath }
   let genCmd = Path.concat [ cwdPath, "bin", "index.js" ] <> " generate-operators '.spago/*/*/src/**/*.purs'"
 
   writeTextFile UTF8 (Path.concat [ tmpPath, "spago.dhall" ]) defaultSpagoDhall
   writeTextFile UTF8 (Path.concat [ tmpPath, "package.json" ]) defaultPackageJson
-  _ <- ChildProcess.execSync "npm install" opts
+  _ <- ChildProcess.execSync' "npm install" opts
   output <- Buffer.toString UTF8 =<< catchException
     ( \err -> do
         stdout <- Buffer.toString UTF8 ((unsafeCoerce err).stdout :: Buffer)
@@ -40,7 +40,7 @@ main = do
         Console.error stderr
         throwException err
     )
-    (ChildProcess.execSync genCmd opts)
+    (ChildProcess.execSync' genCmd opts)
 
   let
     header =
