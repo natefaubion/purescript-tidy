@@ -14,7 +14,7 @@
     "bundle/**/*.js"
   ],
   "scripts": {
-    "version": "echo 'export const version = \"v'$npm_package_version'\";' > ./bin/Bin/Version.js && git add ./bin/Bin/Version.js",
+    "version": "echo 'export const version = \"v'$npm_package_version'\";' > ./bin/src/Bin/Version.js && git add ./bin/src/Bin/Version.js",
     "postversion": "git push && git push --tags",
     "build": "spago build --quiet",
     "bundle": "npm run build && purs-backend-es build --int-tags && npm run bundle:main && npm run bundle:worker",
