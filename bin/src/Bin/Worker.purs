@@ -37,6 +37,7 @@ type WorkerConfig =
   , indent :: Int
   , operatorsFile :: String
   , ribbon :: Number
+  , thenPlacement :: String
   , typeArrowPlacement :: String
   , unicode :: String
   , width :: Int
@@ -49,6 +50,7 @@ toWorkerConfig options =
   , indent: options.indent
   , operatorsFile: fromMaybe ".tidyoperators.default" options.operatorsFile
   , ribbon: options.ribbon
+  , thenPlacement: FormatOptions.thenPlacementToString options.thenPlacement
   , typeArrowPlacement: FormatOptions.typeArrowPlacementToString options.typeArrowPlacement
   , unicode: FormatOptions.unicodeToString options.unicode
   , width: fromMaybe top options.width
@@ -88,6 +90,7 @@ formatCommand args operators contents = do
           { importSort = args.importSort
           , importWrap = args.importWrap
           , operators = remapOperators operators ok
+          , thenPlacement = args.thenPlacement
           , typeArrowPlacement = args.typeArrowPlacement
           , unicode = args.unicode
           }
@@ -115,6 +118,9 @@ formatInPlaceCommand shouldCheck operators { filePath, config } = do
       , indent: config.indent
       , operatorsFile: Nothing
       , ribbon: config.ribbon
+      , thenPlacement:
+          fromRight' (\_ -> unsafeCrashWith "Unknown thenPlacement value") do
+            FormatOptions.thenPlacementFromString config.thenPlacement
       , typeArrowPlacement:
           fromRight' (\_ -> unsafeCrashWith "Unknown typeArrowPlacement value") do
             FormatOptions.typeArrowPlacementFromString config.typeArrowPlacement

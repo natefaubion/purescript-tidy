@@ -111,6 +111,7 @@ parseDirectivesFromModule (Module { header: ModuleHeader header, body }) =
         { formatError: default.formatError
         , operators: default.operators
         , unicode: opts.unicode
+        , thenPlacement: opts.thenPlacement
         , typeArrowPlacement: opts.typeArrowPlacement
         , importSort: opts.importSort
         , importWrap: opts.importWrap

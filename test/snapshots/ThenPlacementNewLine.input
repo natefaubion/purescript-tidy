@@ -1,0 +1,56 @@
+-- @format --then-new-line
+module ThenPlacementNewLine where
+
+-- Simple if-then-else
+simple = if condition then result else alternative
+
+-- Nested if-then-else
+nested = if a then b else if x then y else z
+
+-- Multi-line condition
+multilineCondition =
+  if someVeryLongConditionThatSpansMultipleLinesAndNeedsToWrap
+    then shortResult
+    else alternativeResult
+
+-- Multi-line then/else branches
+multilineBranches =
+  if condition
+    then do
+      action1
+      action2
+      result
+    else do
+      alternativeAction1
+      alternativeAction2
+      alternativeResult
+
+-- Complex nested case
+complexNested =
+  if firstCondition
+    then if secondCondition
+      then firstResult
+      else if thirdCondition
+        then secondResult
+        else thirdResult
+    else if fourthCondition
+      then fourthResult
+      else finalResult
+
+-- With guards
+withGuards x y
+  | condition = if guard then guardedResult else defaultResult
+  | otherwise = if alternativeGuard then alternativeResult else fallback
+
+-- In do blocks
+inDoBlock = do
+  value <- computation
+  if isValid value
+    then pure value
+    else throwError "Invalid value"
+
+-- With complex expressions
+complexExpressions =
+  if (someFunction arg1 arg2 >>= anotherFunction)
+    then (complexResult >>= transform >>= validate)
+    else (fallbackComputation >>= handleError)

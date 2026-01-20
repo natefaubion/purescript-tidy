@@ -2,6 +2,7 @@ module Tidy
   ( FormatOptions
   , defaultFormatOptions
   , TypeArrowOption(..)
+  , ThenPlacementOption(..)
   , ImportSortOption(..)
   , ImportWrapOption(..)
   , Format
@@ -50,6 +51,12 @@ data TypeArrowOption
 
 derive instance eqTypeArrowOption :: Eq TypeArrowOption
 
+data ThenPlacementOption
+  = ThenSameLine
+  | ThenNewLine
+
+derive instance eqThenPlacementOption :: Eq ThenPlacementOption
+
 data ImportWrapOption
   = ImportWrapSource
   | ImportWrapAuto
@@ -66,6 +73,7 @@ type FormatOptions e a =
   { formatError :: e -> FormatDoc a
   , unicode :: UnicodeOption
   , typeArrowPlacement :: TypeArrowOption
+  , thenPlacement :: ThenPlacementOption
   , operators :: PrecedenceMap
   , importSort :: ImportSortOption
   , importWrap :: ImportWrapOption
@@ -76,6 +84,7 @@ defaultFormatOptions =
   { formatError
   , unicode: UnicodeSource
   , typeArrowPlacement: TypeArrowFirst
+  , thenPlacement: ThenSameLine
   , operators: Map.empty
   , importSort: ImportSortSource
   , importWrap: ImportWrapSource
@@ -991,19 +1000,37 @@ toElseIfChain ifte = go (pure (IfThen ifte.keyword ifte.cond ifte.then ifte.true
 formatElseIfChain :: forall e a. Format (NonEmptyArray (ElseIfChain e)) e a
 formatElseIfChain conf = flexGroup <<< joinWithMap spaceBreak case _ of
   IfThen kw1 cond kw2 expr ->
-    formatToken conf kw1
-      `flexSpaceBreak`
-        indent (anchor (flexGroup (formatExpr conf cond)))
-      `space`
-        Hang.toFormatDoc (anchor (formatToken conf kw2) `hang` formatHangingExpr conf expr)
+    case conf.thenPlacement of
+      ThenSameLine ->
+        formatToken conf kw1
+          `flexSpaceBreak`
+            indent (anchor (flexGroup (formatExpr conf cond)))
+          `space`
+            Hang.toFormatDoc (anchor (formatToken conf kw2) `hang` formatHangingExpr conf expr)
+      ThenNewLine ->
+        formatToken conf kw1
+          `flexSpaceBreak`
+            indent (anchor (flexGroup (formatExpr conf cond)))
+          `break`
+            Hang.toFormatDoc (anchor (formatToken conf kw2) `hang` formatHangingExpr conf expr)
   ElseIfThen kw1 kw2 cond kw3 expr ->
-    formatToken conf kw1
-      `space`
-        indent (anchor (formatToken conf kw2))
-      `flexSpaceBreak`
-        indent (anchor (flexGroup (formatExpr conf cond)))
-      `space`
-        Hang.toFormatDoc (anchor (formatToken conf kw3) `hang` formatHangingExpr conf expr)
+    case conf.thenPlacement of
+      ThenSameLine ->
+        formatToken conf kw1
+          `space`
+            indent (anchor (formatToken conf kw2))
+          `flexSpaceBreak`
+            indent (anchor (flexGroup (formatExpr conf cond)))
+          `space`
+            Hang.toFormatDoc (anchor (formatToken conf kw3) `hang` formatHangingExpr conf expr)
+      ThenNewLine ->
+        formatToken conf kw1
+          `space`
+            indent (anchor (formatToken conf kw2))
+          `flexSpaceBreak`
+            indent (anchor (flexGroup (formatExpr conf cond)))
+          `break`
+            Hang.toFormatDoc (anchor (formatToken conf kw3) `hang` formatHangingExpr conf expr)
   Else kw1 expr ->
     Hang.toFormatDoc (formatToken conf kw1 `hang` formatHangingExpr conf expr)
 

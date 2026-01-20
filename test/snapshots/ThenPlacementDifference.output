@@ -1,0 +1,31 @@
+module ThenPlacementDifference where
+
+-- This should trigger the difference with narrow width
+test1 =
+  if someVeryLongConditionExpressionThatWillDefinitelyWrap then shortResult
+  else alternativeValue
+
+-- This should also show the difference
+test2 =
+  if firstLongCondition then
+    if secondLongCondition then result1
+    else result2
+  else alternativeResult
+-- @format --then-new-line --width 40
+module ThenPlacementDifference where
+
+-- This should trigger the difference with narrow width
+test1 =
+  if
+    someVeryLongConditionExpressionThatWillDefinitelyWrap
+  then shortResult
+  else alternativeValue
+
+-- This should also show the difference
+test2 =
+  if firstLongCondition
+  then
+    if secondLongCondition
+    then result1
+    else result2
+  else alternativeResult

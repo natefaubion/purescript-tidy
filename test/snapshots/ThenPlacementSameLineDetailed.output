@@ -1,0 +1,43 @@
+module ThenPlacementSameLineDetailed where
+
+-- Case that should show difference: multi-line condition with then on same line
+test1 =
+  if someVeryLongConditionExpressionThatWillDefinitelyWrapToNextLine then result
+  else alternative
+
+-- Nested case that should show the difference
+test2 =
+  if firstCondition then
+    if secondCondition then firstResult
+    else secondAlternative
+  else if thirdCondition then thirdResult
+  else finalAlternative
+
+-- Chain of if-then-else that should trigger the placement difference
+test3 =
+  if condition1 then value1
+  else if condition2 then value2
+  else if condition3 then value3
+  else defaultValue
+-- @format --then-same-line
+module ThenPlacementSameLineDetailed where
+
+-- Case that should show difference: multi-line condition with then on same line
+test1 =
+  if someVeryLongConditionExpressionThatWillDefinitelyWrapToNextLine then result
+  else alternative
+
+-- Nested case that should show the difference
+test2 =
+  if firstCondition then
+    if secondCondition then firstResult
+    else secondAlternative
+  else if thirdCondition then thirdResult
+  else finalAlternative
+
+-- Chain of if-then-else that should trigger the placement difference
+test3 =
+  if condition1 then value1
+  else if condition2 then value2
+  else if condition3 then value3
+  else defaultValue

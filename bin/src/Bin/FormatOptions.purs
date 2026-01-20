@@ -13,7 +13,7 @@ import Data.Argonaut.Encode (assoc, encodeJson, extend)
 import Data.Either (Either)
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Traversable (traverse)
-import Tidy (ImportSortOption(..), ImportWrapOption(..), TypeArrowOption(..), UnicodeOption(..))
+import Tidy (ImportSortOption(..), ImportWrapOption(..), ThenPlacementOption(..), TypeArrowOption(..), UnicodeOption(..))
 
 type FormatOptions =
   { importSort :: ImportSortOption
@@ -21,6 +21,7 @@ type FormatOptions =
   , indent :: Int
   , operatorsFile :: Maybe String
   , ribbon :: Number
+  , thenPlacement :: ThenPlacementOption
   , typeArrowPlacement :: TypeArrowOption
   , unicode :: UnicodeOption
   , width :: Maybe Int
@@ -33,6 +34,7 @@ defaults =
   , indent: 2
   , operatorsFile: Nothing
   , ribbon: 1.0
+  , thenPlacement: ThenSameLine
   , typeArrowPlacement: TypeArrowFirst
   , unicode: UnicodeSource
   , width: Nothing
@@ -76,6 +78,16 @@ formatOptions =
           "The ratio of printable width to maximum width.\nFrom 0 to 1. Defaults to 1."
           # Arg.number
           # Arg.default defaults.ribbon
+    , thenPlacement:
+        Arg.choose "then placement"
+          [ Arg.flag [ "--then-same-line", "-tsl" ]
+              "Then keyword is placed on the same line as the if condition.\nDefault."
+              $> ThenSameLine
+          , Arg.flag [ "--then-new-line", "-tnl" ]
+              "Then keyword is placed on a new line."
+              $> ThenNewLine
+          ]
+          # Arg.default defaults.thenPlacement
     , typeArrowPlacement:
         Arg.choose "type arrow placement"
           [ Arg.flag [ "--arrow-first", "-af" ]
@@ -117,6 +129,7 @@ fromJson json = do
   indent <- obj .:? "indent"
   operatorsFile <- obj .:? "operatorsFile"
   ribbon <- obj .:? "ribbon"
+  thenPlacement <- traverse thenPlacementFromString =<< obj .:? "thenPlacement"
   typeArrowPlacement <- traverse typeArrowPlacementFromString =<< obj .:? "typeArrowPlacement"
   unicode <- traverse unicodeFromString =<< obj .:? "unicode"
   width <- obj .:? "width"
@@ -126,6 +139,7 @@ fromJson json = do
     , indent: fromMaybe defaults.indent indent
     , operatorsFile: operatorsFile <|> defaults.operatorsFile
     , ribbon: fromMaybe defaults.ribbon ribbon
+    , thenPlacement: fromMaybe defaults.thenPlacement thenPlacement
     , typeArrowPlacement: fromMaybe defaults.typeArrowPlacement typeArrowPlacement
     , unicode: fromMaybe defaults.unicode unicode
     , width: width <|> defaults.width
@@ -139,9 +153,21 @@ toJson options =
     # extend (assoc "indent" options.indent)
     # extend (assoc "operatorsFile" (maybe jsonNull encodeJson options.operatorsFile))
     # extend (assoc "ribbon" options.ribbon)
+    # extend (assoc "thenPlacement" (thenPlacementToString options.thenPlacement))
     # extend (assoc "typeArrowPlacement" (typeArrowPlacementToString options.typeArrowPlacement))
     # extend (assoc "unicode" (unicodeToString options.unicode))
     # extend (assoc "width" (maybe jsonNull encodeJson options.width))
+
+thenPlacementFromString :: String -> Either JsonDecodeError ThenPlacementOption
+thenPlacementFromString = case _ of
+  "same-line" -> pure ThenSameLine
+  "new-line" -> pure ThenNewLine
+  other -> throwError $ UnexpectedValue (Json.fromString other)
+
+thenPlacementToString :: ThenPlacementOption -> String
+thenPlacementToString = case _ of
+  ThenSameLine -> "same-line"
+  ThenNewLine -> "new-line"
 
 typeArrowPlacementFromString :: String -> Either JsonDecodeError TypeArrowOption
 typeArrowPlacementFromString = case _ of
