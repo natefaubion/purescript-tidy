@@ -1,0 +1,21 @@
+module DerivingClauses where
+
+import Prelude
+
+newtype TodoId = TodoId String
+  derive (Newtype)
+
+newtype TodoTitle = TodoTitle String
+  derive (Newtype)
+  derive newtype (Eq, Ord, Show)
+
+newtype Wrapped = Wrapped Int
+  derive (Eq, Ord, Show) via Int
+
+data Color = Red | Green | Blue
+  derive (Eq, Ord, Show)
+
+newtype UserId = UserId String
+  derive (Newtype)
+  derive newtype (Eq, Ord, Show)
+  derive (ReadForeign, WriteForeign) via String

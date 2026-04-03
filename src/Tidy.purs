@@ -33,7 +33,7 @@ import Data.Tuple (Tuple(..), fst, snd)
 import Dodo as Dodo
 import Partial.Unsafe (unsafeCrashWith)
 import PureScript.CST.Errors (RecoveredError(..))
-import PureScript.CST.Types (AppSpine(..), Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), OneOrDelimited(..), Operator, PatternGuard(..), Prefixed(..), Proper, QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
+import PureScript.CST.Types (AppSpine(..), Binder(..), ClassFundep(..), ClassHead, Comment(..), DataCtor(..), DataHead, DataMembers(..), Declaration(..), Delimited, DelimitedNonEmpty, DeriveClassHead(..), DeriveClause(..), DoStatement(..), Export(..), Expr(..), FixityOp(..), Foreign(..), Guarded(..), GuardedExpr(..), Ident, IfThenElse, Import(..), ImportDecl(..), Instance(..), InstanceBinding(..), InstanceHead, Label, Labeled(..), LetBinding(..), LineFeed, Module(..), ModuleBody(..), ModuleHeader(..), ModuleName, Name(..), OneOrDelimited(..), Operator, PatternGuard(..), Prefixed(..), Proper, QualifiedName(..), RecordLabeled(..), RecordUpdate(..), Row(..), Separated(..), SourceStyle(..), SourceToken, Token(..), Type(..), TypeVarBinding(..), ValueBindingFields, Where(..), Wrapped(..))
 import Tidy.Doc (FormatDoc, align, alignCurrentColumn, anchor, break, flexDoubleBreak, flexGroup, flexSoftBreak, flexSpaceBreak, forceMinSourceBreaks, fromDoc, indent, joinWith, joinWithMap, leadingBlockComment, leadingLineComment, locally, softBreak, softSpace, sourceBreak, space, spaceBreak, text, trailingBlockComment, trailingLineComment)
 import Tidy.Doc (FormatDoc, toDoc) as Exports
 import Tidy.Doc as Doc
@@ -377,24 +377,26 @@ formatImport conf = case _ of
 
 formatDecl :: forall e a. Format (Declaration e) e a
 formatDecl conf = case _ of
-  DeclData head (Just (Tuple equals (Separated ctors))) ->
-    if Array.null ctors.tail then
-      declareHanging
-        (formatDataHead conf head)
-        space
-        (anchor (formatToken conf equals))
-        (formatHangingDataCtor conf ctors.head)
-    else
-      formatDataHead conf head `flexSpaceBreak` indent do
-        formatDataElem (Tuple equals ctors.head)
-          `spaceBreak` joinWithMap spaceBreak formatDataElem ctors.tail
+  DeclData head (Just (Tuple equals (Separated ctors))) derivs ->
+    formatDeclWithDerivs conf derivs do
+      if Array.null ctors.tail then
+        declareHanging
+          (formatDataHead conf head)
+          space
+          (anchor (formatToken conf equals))
+          (formatHangingDataCtor conf ctors.head)
+      else
+        formatDataHead conf head `flexSpaceBreak` indent do
+          formatDataElem (Tuple equals ctors.head)
+            `spaceBreak` joinWithMap spaceBreak formatDataElem ctors.tail
     where
     formatDataElem (Tuple a b) =
       formatToken conf a
         `space` formatListElem 2 formatDataCtor conf b
 
-  DeclData head _ ->
-    formatDataHead conf head
+  DeclData head _ derivs ->
+    formatDeclWithDerivs conf derivs do
+      formatDataHead conf head
 
   DeclType head equals ty ->
     declareHanging
@@ -403,12 +405,13 @@ formatDecl conf = case _ of
       (anchor (formatToken conf equals))
       (formatHangingType conf ty)
 
-  DeclNewtype head equals name ty ->
-    declareHanging
-      (formatDataHead conf head)
-      space
-      (anchor (formatToken conf equals))
-      (formatHangingDataCtor conf (DataCtor { name, fields: [ ty ] }))
+  DeclNewtype head equals name ty derivs ->
+    formatDeclWithDerivs conf derivs do
+      declareHanging
+        (formatDataHead conf head)
+        space
+        (anchor (formatToken conf equals))
+        (formatHangingDataCtor conf (DataCtor { name, fields: [ ty ] }))
 
   DeclRole kw1 kw2 name rls ->
     flatten $ words <> NonEmptyArray.toArray roles
@@ -521,6 +524,35 @@ formatDataHead conf { keyword, name, vars } =
   formatToken conf keyword `space` indent do
     anchor (formatName conf name)
       `flexSpaceBreak` joinWithMap spaceBreak (formatTypeVarBindingPlain conf) vars
+
+formatDeclWithDerivs :: forall e a. FormatOptions e a -> Array (DeriveClause e) -> FormatDoc a -> FormatDoc a
+formatDeclWithDerivs conf derivs declDoc =
+  case derivs of
+    [] -> declDoc
+    _ -> declDoc `break` indent (joinWithMap break (formatDeriveClause conf) derivs)
+
+formatDeriveClause :: forall e a. Format (DeriveClause e) e a
+formatDeriveClause conf = case _ of
+  DeriveClauseStandard kw classes ->
+    formatToken conf kw
+      `space` anchor (formatParenListNonEmpty Grouped formatDeriveClassHead conf classes)
+  DeriveClauseNewtype kw nt classes ->
+    formatToken conf kw
+      `space` anchor (formatToken conf nt)
+      `space` anchor (formatParenListNonEmpty Grouped formatDeriveClassHead conf classes)
+  DeriveClauseVia kw classes viaTok viaTy ->
+    formatToken conf kw
+      `space` anchor (formatParenListNonEmpty Grouped formatDeriveClassHead conf classes)
+      `space` anchor (formatToken conf viaTok)
+      `space` anchor (formatType conf viaTy)
+
+formatDeriveClassHead :: forall e a. Format (DeriveClassHead e) e a
+formatDeriveClassHead conf (DeriveClassHead { className, args }) =
+  case args of
+    [] -> formatQualifiedName conf className
+    _ ->
+      formatQualifiedName conf className
+        `space` joinWithMap space (formatType conf) args
 
 formatDataCtor :: forall e a. Format (DataCtor e) e a
 formatDataCtor conf = Hang.toFormatDoc <<< formatHangingDataCtor conf
@@ -1339,9 +1371,9 @@ formatTopLevelGroups = formatDeclGroups topDeclGroupSeparator topDeclGroup forma
     _, _ -> DeclGroupSoft
 
   topDeclGroup = case _ of
-    DeclData { name: Name { name } } _ -> DeclGroupType name
+    DeclData { name: Name { name } } _ _ -> DeclGroupType name
     DeclType { name: Name { name } } _ _ -> DeclGroupType name
-    DeclNewtype { name: Name { name } } _ _ _ -> DeclGroupType name
+    DeclNewtype { name: Name { name } } _ _ _ _ -> DeclGroupType name
     DeclClass { name: Name { name } } _ -> DeclGroupClass name
     DeclKindSignature _ (Labeled { label: Name { name } }) -> DeclGroupTypeSignature name
     DeclSignature (Labeled { label: Name { name } }) -> DeclGroupValueSignature name
